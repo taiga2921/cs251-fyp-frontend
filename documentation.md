@@ -49,7 +49,7 @@ The frontend currently provides:
 | User Management — list | Implemented | `feature/management-user/views/UserList.jsx`. |
 | User Management — view | Implemented | `feature/management-user/views/UserView.jsx`. |
 | User Management — add/edit | **Code present but routes disabled** | Components import non-existent files (`ui-component/FieldContainer`, `SuccessDialog`, etc.) and routes are commented out in `MainRoutes.jsx`. |
-| Zone / Camera / Checkpoint management | **Empty feature folders** | `feature/management-zone`, `feature/management-camera`, `feature/management-checkpoint`, `feature/authentication` exist but contain no source files. |
+| Zone / Camera / Checkpoint management | **Partially implemented** | Zone module now includes service/repository/controller/view files and calls backend `/zones`; camera/checkpoint modules remain incomplete. |
 | Theme Customization | Implemented | Font family + border radius drawer (toggle button itself is currently commented out). |
 | Notifications | UI-only | Static demo data. |
 
@@ -177,7 +177,7 @@ This keeps views purely presentational while controllers own state, side effects
 
 ### Feature-Based Structure
 
-`src/feature/` contains one folder per business domain. Today only `management-user` is implemented; the others (`authentication`, `management-camera`, `management-checkpoint`, `management-zone`) exist as empty placeholders.
+`src/feature/` contains one folder per business domain. `management-user` is the most complete module; `management-zone` now has active data/service wiring, while `authentication`, `management-camera`, and `management-checkpoint` are still partially implemented.
 
 ### State Management Flow
 
@@ -358,7 +358,7 @@ feature/management-user/
     └── UserEdit.jsx                 # Imports unresolved components — see Section 13
 ```
 
-The other feature folders (`authentication/`, `management-camera/`, `management-checkpoint/`, `management-zone/`) are empty.
+The other feature folders (`authentication/`, `management-camera/`, `management-checkpoint/`) remain sparse/incomplete; `management-zone/` now includes service/repository/controller/view files.
 
 ### `src/views/`
 
@@ -641,7 +641,7 @@ Behavior of `request()`:
 
 ### API Service Structure
 
-Per-feature services wrap `api.*` calls and normalize responses. Today only `userService` exists.
+Per-feature services wrap `api.*` calls and normalize responses. `userService` and `zoneService` are implemented.
 
 `src/feature/management-user/datasources/userService.js`:
 
@@ -660,6 +660,18 @@ It also normalizes errors via `buildServiceError()`:
 - Re-throws an `Error` with `status`, `data`, and `originalError` attached.
 
 `extractResponsePayload(response)` then returns `response.data` (the parsed JSON body), so callers receive the raw backend payload.
+
+`src/feature/management-zone/datasources/zoneService.js`:
+
+| Method | HTTP call | Notes |
+|--------|-----------|-------|
+| `getAllZones()` | `api.get('/zones')` | Returns parsed backend payload from Laravel zone list endpoint. |
+| `getZoneById(id)` | `api.get('/zones/{id}')` | |
+| `createZone(zoneData)` | `api.post('/zones', zoneData)` | Admin-only route on backend. |
+| `updateZone(id, zoneData)` | `api.patch('/zones/{id}', zoneData)` | Uses PATCH to match Laravel `PUT/PATCH` update route. |
+| `deleteZone(id)` | `api.delete('/zones/{id}')` | Handles backend `204 No Content` responses safely. |
+
+Like `userService`, `zoneService` maps `401` and `403` to user-friendly service errors (`Unauthorized...` / `Forbidden...`) and rethrows with `status`, `data`, and `originalError`.
 
 ### Authentication Token Handling
 
@@ -702,6 +714,11 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 | `userService.createUser` | `POST` | `/users` |
 | `userService.updateUser` | `PATCH` | `/users/{id}` |
 | `userService.deleteUser` | `DELETE` | `/users/{id}` |
+| `zoneService.getAllZones` | `GET` | `/zones` |
+| `zoneService.getZoneById` | `GET` | `/zones/{id}` |
+| `zoneService.createZone` | `POST` | `/zones` |
+| `zoneService.updateZone` | `PATCH` | `/zones/{id}` |
+| `zoneService.deleteZone` | `DELETE` | `/zones/{id}` |
 
 ### Frontend ↔ Laravel Communication
 
@@ -1354,7 +1371,7 @@ The "Logout" `ListItemButton` in `Header/ProfileSection/index.jsx` has no handle
 
 ### Empty Feature Folders
 
-`feature/authentication`, `feature/management-camera`, `feature/management-checkpoint`, and `feature/management-zone` exist as empty folders. The sidebar (`menu-items/admin.js`) advertises Zone and Camera Management with URLs that resolve to **no routes**.
+`feature/authentication`, `feature/management-camera`, and `feature/management-checkpoint` are still incomplete. Zone service wiring exists, but route/menu parity for all admin management screens should still be validated end-to-end.
 
 ### `ErrorBoundary` Is Defined but Not Wired
 

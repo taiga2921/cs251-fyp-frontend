@@ -15,6 +15,17 @@ const AdminUserManagementView = Loadable(lazy(() => import('../feature/managemen
 const AdminUserManagementAdd = Loadable(lazy(() => import('../feature/management-user/views/UserAdd')));
 const AdminUserManagementEdit = Loadable(lazy(() => import('../feature/management-user/views/UserEdit')));
 
+const AdminZoneManagement = Loadable(lazy(() => import('../feature/management-zone/views/ZoneList')));
+const AdminZoneManagementAdd = Loadable(lazy(() => import('../feature/management-zone/views/ZoneAdd')));
+const AdminZoneManagementEdit = Loadable(lazy(() => import('../feature/management-zone/views/ZoneEdit')));
+
+const AdminCheckpointManagement = Loadable(lazy(() => import('../feature/management-checkpoint/views/CheckpointList')));
+const AdminCheckpointManagementView = Loadable(lazy(() => import('../feature/management-checkpoint/views/CheckpointView')));
+const AdminCheckpointManagementAdd = Loadable(lazy(() => import('../feature/management-checkpoint/views/CheckpointAdd')));
+const AdminCheckpointManagementEdit = Loadable(lazy(() => import('../feature/management-checkpoint/views/CheckpointEdit')));
+
+// const AdminBlockchain = Loadable(lazy(() => import('../feature/blockchain/views/GateLiveList')));
+
 // utilities routing
 const UtilsTypography = Loadable(lazy(() => import('views/utilities/Typography')));
 const UtilsColor = Loadable(lazy(() => import('views/utilities/Color')));
@@ -57,14 +68,46 @@ const MainRoutes = {
       path: 'admin/management-user/view/:userId',
       element: <AdminUserManagementView />
     },
-    //  {
-    //    path: 'admin/management-user/add',
-    //    element: <AdminUserManagementAdd />
-    //  },
-    //  {
-    //    path: 'admin/management-user/edit',
-    //    element: <AdminUserManagementEdit />
-    //  },
+     {
+       path: 'admin/management-user/add',
+       element: <AdminUserManagementAdd />
+     },
+     {
+       path: 'admin/management-user/edit/:userId',
+       element: <AdminUserManagementEdit />
+     },
+
+    // Admin Routes - Zone Management
+    {
+      path: 'admin/management-zone',
+      element: <AdminZoneManagement />
+    },
+    {
+      path: 'admin/management-zone/add',
+      element: <AdminZoneManagementAdd />
+    },
+    {
+      path: 'admin/management-zone/edit/:zoneId',
+      element: <AdminZoneManagementEdit />
+    },
+
+    // Admin Routes - Checkpoint Management
+    {
+       path: 'admin/management-zone/view/:zoneId',
+       element: <AdminCheckpointManagement />
+    },
+    {
+       path: 'admin/management-checkpoint/view/:checkpointId',
+       element: <AdminCheckpointManagementView />
+    },
+    {
+       path: 'admin/management-checkpoint/add/:zoneId',
+       element: <AdminCheckpointManagementAdd />
+    },
+    {
+       path: 'admin/management-checkpoint/edit/:zoneId/:checkpointId',
+       element: <AdminCheckpointManagementEdit />
+    },
 
     {
       path: 'typography',
