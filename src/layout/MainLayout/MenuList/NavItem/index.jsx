@@ -32,7 +32,7 @@ export default function NavItem({ item, level, isParents = false, setSelectedID 
   } = useConfig();
 
   const { menuMaster } = useGetMenuMaster();
-  const drawerOpen = menuMaster.isDashboardDrawerOpened;
+  const drawerOpen = Boolean(menuMaster?.isDashboardDrawerOpened);
   const isSelected = !!matchPath({ path: item?.link ? item.link : item.url, end: false }, pathname);
 
   const [hoverStatus, setHover] = useState(false);

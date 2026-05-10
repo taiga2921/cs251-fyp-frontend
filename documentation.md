@@ -20,6 +20,7 @@ This document is the primary technical reference for the **`frontend-react-v1`**
 12. [Build & Deployment](#12-build--deployment)
 13. [Known Issues / Technical Debt](#13-known-issues--technical-debt)
 14. [Future Improvements](#14-future-improvements)
+15. [Progressive Web App (PWA)](#15-progressive-web-app-pwa)
 
 ---
 
@@ -37,6 +38,7 @@ The frontend currently provides:
 - A **User Management module** under `feature/management-user` that lists, views, creates, updates, and deletes users via the backend `/users` endpoints. (Add/Edit pages exist but their routes are commented out — see [Section 13](#13-known-issues--technical-debt).)
 - Sample dashboard widgets (charts, cards) inherited from the Berry template.
 - Theme customization (light scheme + CSS variables) with font family / border radius adjustments persisted to `localStorage`.
+- **Progressive Web App (PWA)** support via `vite-plugin-pwa` (service worker precache, web app manifest, optional **Install App** UI in the sidebar when the browser fires `beforeinstallprompt`).
 
 ### Core Functionality
 
@@ -81,6 +83,8 @@ The frontend currently provides:
 | `yup` | `1.7.1` |
 | Sass | `1.94.2` (devDependency) |
 | Yarn | `4.10.3` (`packageManager`) |
+| `vite-plugin-pwa` | `^1.3.0` (devDependency) — Workbox service worker + web manifest generation. |
+| `workbox-window` | `^7.4.1` (devDependency) — Used by the PWA client registration path. |
 
 ### UI Libraries / Frameworks Used
 
@@ -89,7 +93,7 @@ The frontend currently provides:
 - **Tabler Icons** (`@tabler/icons-react`) — primary icon set, with a Vite alias to its ESM build.
 - **Framer Motion** — used by Berry's `AnimateButton` / `Transitions`.
 - **ApexCharts** — dashboard charts.
-- **SimpleBar React** — custom scrollbars in the sidebar / drawers.
+- **SimpleBar React** — custom scrollbars in the **desktop** sidebar. On **mobile** (`useMediaQuery` / `downMD`), the sidebar’s scrollable region uses a native `overflow-y: auto` `Box` instead of the shared `SimpleBar` component: that wrapper uses `react-device-detect`’s `BrowserView` + `MobileView`, and on many phones both mount, which breaks the flex column and hides the pinned **Install App** button (see [Section 15](#15-progressive-web-app-pwa)).
 - **Slick Carousel** — listed as a dependency (no usage detected in `src/`; carried from the Berry template).
 
 ### Main npm Packages
@@ -119,7 +123,7 @@ No other backend endpoints are currently invoked from the frontend.
 │                  Browser (Vite SPA)                     │
 │                                                         │
 │   ┌───────────────────────────────────────────────┐    │
-│   │ index.jsx                                      │    │
+│   │ index.jsx — createRoot; registerSW() (PWA SW)  │    │
 │   │   └── ConfigProvider (Context + localStorage)  │    │
 │   │        └── App.jsx                             │    │
 │   │             └── ThemeCustomization (MUI Theme) │    │
@@ -289,13 +293,13 @@ frontend-react-v1/
 ├── yarn.lock
 ├── README.md                 # Original CRA-style README (legacy)
 ├── documentation.md          # ← this file
+├── public/                   # Static files copied to dist root (favicon, `icons/` for PWA manifest)
 └── src/
     ├── App.jsx               # Mounts ThemeCustomization + RouterProvider
-    ├── index.jsx             # createRoot + ConfigProvider + global font CSS
+    ├── index.jsx             # createRoot + ConfigProvider + fonts + `registerSW` (vite-plugin-pwa)
     ├── config.js             # DASHBOARD_PATH, fontFamily, borderRadius defaults
     ├── reportWebVitals.js
-    ├── serviceWorker.jsx     # CRA-style SW utility (registered=unregister())
-    ├── vite-env.d.js
+    ├── vite-env.d.js         # `vite/client` + `vite-plugin-pwa/client` references
     ├── api/                  # Centralized HTTP client + SWR-based menu store
     ├── assets/               # SCSS + images (logo, auth backgrounds, user avatar)
     ├── contexts/             # ConfigContext (theme, persisted via localStorage)
@@ -320,7 +324,7 @@ frontend-react-v1/
 
 ### `src/feature/`
 
-Currently only `management-user` is non-empty.
+Multiple feature folders exist (e.g. `management-user`, `management-zone`, `patrol`, `feature/authentication`, …). The tree below documents **`management-user`** as the reference Clean-Architecture example.
 
 ```
 feature/management-user/
@@ -384,7 +388,7 @@ Page-level components rendered by routes:
 |---------------|---------|
 | `MainLayout/index.jsx` | Sticky AppBar header, sidebar, breadcrumbs (`ui-component/extended/Breadcrumbs`), `<Outlet />`, footer, `Customization` drawer. |
 | `MainLayout/Header/` | Logo, drawer toggle button, `NotificationSection`, `ProfileSection`. (`SearchSection` is commented out.) |
-| `MainLayout/Sidebar/` | Drawer + Mini drawer + `MenuList` + (empty) `MenuCard`. |
+| `MainLayout/Sidebar/` | Drawer + mini drawer + `MenuList` + (empty) `MenuCard` + `SidebarPwaInstall` (PWA install CTA when supported). |
 | `MainLayout/MenuList/` | `NavGroup`, `NavItem`, `NavCollapse` — render the menu tree from `menu-items/`. |
 | `MainLayout/HorizontalBar.jsx` | Alternate horizontal menu bar (defined but **not mounted** by `MainLayout`). |
 | `MainLayout/Footer.jsx` | Static footer with CodedThemes / GitHub / Figma links. |
@@ -413,16 +417,17 @@ Reusable presentational components.
 | `extended/Avatar.jsx`, `extended/AppBar.jsx`, `extended/Accordion.jsx`, `extended/ImageList.jsx` | Berry MUI extensions. |
 | `extended/Form/CustomFormControl.jsx`, `FormControl.jsx`, `FormControlSelect.jsx`, `InputLabel.jsx` | Styled form controls used by login form / Berry pages. |
 | `table/PaginationFooter.jsx` | Generic “rows per page + page index + MUI Pagination” footer (used by User Management). |
-| `third-party/SimpleBar.jsx` | Wrapper around `simplebar-react` for custom scrollbars. |
+| `third-party/SimpleBar.jsx` | Wrapper around `simplebar-react` for custom scrollbars. Renders `BrowserView` (SimpleBar) and `MobileView` (plain `Box`) — **the main layout sidebar on small screens does not use this** for the menu scroller; see `layout/MainLayout/Sidebar/index.jsx`. |
 
 ### `src/hooks/`
 
 | Hook | Purpose |
 |------|---------|
-| `useConfig` | Returns the theme/config context (`{ state, setState, setField, resetState }`). Throws if used outside `ConfigProvider`. |
+| `useConfig` | Implemented in `contexts/ConfigContext.jsx` and re-exported as default from `hooks/useConfig.js`. Returns `{ state, setState, setField, resetState }`. If React context cannot be resolved (e.g. duplicate React bundles in edge builds), logs a **one-time warning** and returns **non-persistent defaults** so the app still renders instead of throwing. |
 | `useLocalStorage(key, defaultValue)` | Generic `useState`-backed local-storage hook with `setField` and `resetState` helpers. Backs `ConfigContext`. |
 | `useMenuCollapse` | Walks the menu tree and auto-expands the parent menu of the current pathname (uses `react-router-dom#matchPath`). |
 | `useScriptRef` | Tiny `useRef` helper that flips to `false` after mount; used to guard async state updates after unmount. |
+| `usePwaInstallPrompt` | Listens for `beforeinstallprompt` / `appinstalled`, tracks standalone mode (`matchMedia`, `navigator.standalone`), exposes `showInstallButton` and `promptInstall`. Safe on browsers without PWA install APIs (guarded `matchMedia` / legacy `MediaQueryList.addListener`). |
 
 ### `src/utils/`
 
@@ -437,7 +442,7 @@ Reusable presentational components.
 
 | File | Purpose |
 |------|---------|
-| `ConfigContext.jsx` | React context that holds the persisted Berry config object (border radius, font family, miniDrawer, container, outlinedFilled, presetColor, etc.). Backed by `useLocalStorage('berry-config-vite-js', config)`. |
+| `ConfigContext.jsx` | Defines `ConfigContext`, `ConfigProvider`, and **`useConfig`** in one module so provider and hook always share the same context identity. Persists Berry UI prefs via `useLocalStorage('berry-config-vite-js', appConfig)`. Default context uses a **sentinel** (`Symbol`) so “outside provider” is distinguishable from legitimate values; **fallback path** avoids crashing when duplicate React copies break `useContext`. |
 
 ### `src/store/`
 
@@ -854,6 +859,8 @@ The project deliberately avoids a global state library. State is split between:
 const { state, setState, setField, resetState } = useLocalStorage('berry-config-vite-js', config);
 ```
 
+The **`useConfig`** hook lives in the same file as `ConfigProvider` so the context object is never duplicated by split chunks. If `useContext` still sees the empty sentinel (duplicate React in rare builds), the hook logs once and returns **in-memory defaults** with no-op setters so the app does not white-screen.
+
 - `state` — current config object.
 - `setState(next)` — replace.
 - `setField(key, value)` — partial update.
@@ -897,10 +904,11 @@ Controllers also expose handlers (`handleChangePage`, `handleChangeRowsPerPage`,
 
 | Hook | Location | Purpose |
 |------|----------|---------|
-| `useConfig` | `hooks/useConfig.js` | Access `ConfigContext` (throws if unmounted). |
+| `useConfig` | `contexts/ConfigContext.jsx` (re-export `hooks/useConfig.js`) | Theme/config API; fallback path if context is broken by duplicate React (see `contexts/ConfigContext.jsx`). |
 | `useLocalStorage` | `hooks/useLocalStorage.js` | Generic LocalStorage-backed `useState`. |
 | `useMenuCollapse` | `hooks/useMenuCollapse.js` | Auto-expands the parent menu of the active route. |
 | `useScriptRef` | `hooks/useScriptRef.js` | Tracks mounted state for guarded async updates. |
+| `usePwaInstallPrompt` | `hooks/usePwaInstallPrompt.js` | PWA install prompt capture (`beforeinstallprompt`), standalone detection, `promptInstall`. |
 | `useUserController` | `feature/management-user/controllers/...` | Business logic for user list. |
 | `useUserViewController` | same | Business logic for user detail. |
 | `useUserAddController` | same | Business logic for create form. |
@@ -949,7 +957,7 @@ See [Section 3 → `src/ui-component`](#srcui-component). The most reused are:
 
 ### Navigation Components
 
-- **Sidebar** (`Sidebar/index.jsx`) — switches between MUI `<Drawer>` (mobile / mini-drawer mode) and a styled permanent drawer (`MiniDrawerStyled`). Wraps `MenuList` inside `SimpleBar` for custom scrollbars.
+- **Sidebar** (`Sidebar/index.jsx`) — switches between MUI `<Drawer>` (mobile / mini-drawer mode) and a styled permanent drawer (`MiniDrawerStyled`). **Desktop:** `MenuList` + `MenuCard` live inside `SimpleBar`. **Mobile:** a flex column uses a native scrolling `Box` for the menu and pins **Install App** (`SidebarPwaInstall`) under it when the PWA install prompt is available. `usePwaInstallPrompt()` is called on `Sidebar` so `beforeinstallprompt` is captured even when the drawer starts closed.
 - **MenuList** (`MenuList/index.jsx`) — renders the menu tree (`menu-items/index.js`). Uses `NavGroup` → `NavCollapse` → `NavItem`.
 - **Header** (`Header/index.jsx`) — Logo + drawer toggler + `NotificationSection` + `ProfileSection`.
 - **Breadcrumbs** (`ui-component/extended/Breadcrumbs.jsx`) — auto-derived from the current path + menu items.
@@ -1104,15 +1112,23 @@ VITE_API_BASE_URL=http://localhost:8000/api
 
 ### Vite Configuration (`vite.config.mjs`)
 
+The config file is **`vite.config.mjs`** (not `vite.config.js`). Plugins include **`VitePWA`** from `vite-plugin-pwa`, a custom **`jsconfigSrcBaseUrlFallback`** plugin (bare imports when `vite-jsconfig-paths` has no importer during the prod graph), **`react()`**, and **`jsconfigPaths()`**.
+
 | Section | Setting | Notes |
 |---------|---------|-------|
 | `server` | `open: true`, `port: 3000`, `host: true` | Auto-opens browser; binds on all interfaces; fixed dev port. |
 | `build` | `chunkSizeWarningLimit: 1600` | Raises Vite's default chunk warning. |
 | `preview` | `open: true`, `host: true` | Used by `yarn preview`. |
+| `optimizeDeps` | `dedupe: ['react', 'react-dom']`, `include: ['react', 'react-dom', 'react/jsx-runtime']` | Dev pre-bundle consistency. |
 | `define` | `global: 'window'` | Polyfills CommonJS-style `global`. |
-| `resolve.alias` | `@tabler/icons-react` → `@tabler/icons-react/dist/esm/icons/index.mjs` | Forces ESM build of the icon library to keep bundles smaller. |
-| `base` | `${env.VITE_APP_BASE_NAME}` | SPA public base path. |
-| `plugins` | `react()`, `jsconfigPaths()` | React refresh + path-aliasing from `jsconfig.json`. |
+| `resolve.dedupe` | `react`, `react-dom`, `scheduler` | Reduces duplicate React in the bundle. |
+| `resolve.alias` | `react`, `react-dom`, `react/jsx-runtime`, `react/jsx-dev-runtime` → absolute `node_modules` paths | Pins a single React instance for context/providers. |
+| `resolve.alias` | `contexts/ConfigContext`, `config` → absolute paths under `src/` | Ensures one canonical module for context + default config. |
+| `resolve.alias` | `@tabler/icons-react` → ESM icons bundle | Smaller icon imports. |
+| `base` | `${env.VITE_APP_BASE_NAME}` | SPA public base path (from `.env`, often `/`). |
+| `plugins` | `jsconfigSrcBaseUrlFallback`, `react()`, `jsconfigPaths()`, `VitePWA({ … })` | PWA: `generateSW`, manifest, Workbox precache; `injectRegister: false` because registration uses `virtual:pwa-register` in `index.jsx`. |
+
+The **`jsconfigSrcBaseUrlFallback`** plugin resolves bare imports from `src/` when needed for Vite 7 production builds; it explicitly **skips** `react`, `react-dom`, and `scheduler` so those always resolve via normal node resolution.
 
 ### Build Configuration
 
@@ -1208,6 +1224,8 @@ No secrets are currently stored in `.env` or `src/`. Be careful to keep this tru
 | `prettier` | 3.7.3 | Code formatter (config: `.prettierrc`). |
 | `prettier-eslint-cli` | 8.0.1 | CLI helper. |
 | `sass` | 1.94.2 | Compiles `assets/scss/style.scss`. |
+| `vite-plugin-pwa` | ^1.3.0 | PWA manifest + Workbox `generateSW`. |
+| `workbox-window` | ^7.4.1 | PWA client registration bundle support. |
 
 ### Categorized Notes
 
@@ -1216,6 +1234,7 @@ No secrets are currently stored in `.env` or `src/`. Be careful to keep this tru
 | UI primitives | `@mui/material`, `@mui/icons-material`, `@emotion/*`, `@tabler/icons-react` |
 | Routing | `react-router`, `react-router-dom` |
 | State / data | `swr` (very limited use), local `useState` |
+| PWA | `vite-plugin-pwa`, `workbox-window` |
 | Forms / validation | Hand-written (yup is unused) |
 | Charts | `apexcharts`, `react-apexcharts` |
 | Utilities | `lodash-es`, `react-device-detect`, `material-ui-popup-state` |
@@ -1302,12 +1321,16 @@ After `yarn build`:
 
 ```
 dist/
-├── index.html             # Entry HTML, scripts injected at correct base path
+├── index.html                  # Entry HTML; `<link rel="manifest">` injected by vite-plugin-pwa
+├── manifest.webmanifest        # Web app manifest (name, icons, theme_color, …)
+├── sw.js                       # Generated service worker (Workbox)
+├── workbox-*.js                # Workbox runtime (hash varies by build)
+├── icons/                      # Copied from public/icons (PWA icons referenced by manifest)
 ├── assets/
-│   ├── *.js               # Hashed JS chunks (one per route via React.lazy + Loadable)
-│   ├── *.css              # Hashed CSS / SCSS output
-│   └── *.{svg,woff2,…}    # Static + font assets
-└── favicon.svg
+│   ├── *.js                    # Hashed JS chunks (one per route via React.lazy + Loadable)
+│   ├── *.css                   # Hashed CSS / SCSS output
+│   └── *.{svg,woff2,…}         # Static + font assets
+└── favicon.svg                 # May be hashed under assets/ depending on build
 ```
 
 `build.chunkSizeWarningLimit` is bumped to `1600` KB to account for the large MUI + ApexCharts bundles.
@@ -1409,9 +1432,9 @@ Both `useUserController.handleDeleteUser` (uses `window.confirm`) and various er
 
 There is no Jest/Vitest setup, no test scripts, and no test files in `src/`.
 
-### `serviceWorker.unregister()` Is Always Called
+### ~~`serviceWorker.unregister()`~~ (removed)
 
-`index.jsx` calls `serviceWorker.unregister()` unconditionally, which is fine in development but can confuse offline strategies if the team later wants PWA features.
+The legacy CRA-style `serviceWorker.jsx` was removed. Service worker lifecycle is handled by **`vite-plugin-pwa`** via `registerSW` from `virtual:pwa-register` in `src/index.jsx`.
 
 ---
 
@@ -1469,4 +1492,44 @@ Suggestions that are actionable given the current implementation.
 
 ---
 
-_Last updated: keep this document in sync whenever routing, authentication, the API contract, the feature/module layout, or environment variables change. Source files are the source of truth — when in doubt, re-derive this document from the codebase._
+## 15. Progressive Web App (PWA)
+
+### Overview
+
+The app uses **`vite-plugin-pwa`** with the **`generateSW`** strategy. Workbox precaches hashed assets; navigation falls back to `index.html` for SPA routing. Registration uses **`import { registerSW } from 'virtual:pwa-register'`** in `src/index.jsx` with `injectRegister: false` in the Vite plugin (registration is explicit in application code, not auto-injected into HTML).
+
+### Manifest & icons
+
+- **Manifest** filename: `manifest.webmanifest` (emitted to `dist/`).
+- **Icons:** static PNGs under **`public/icons/`** (`icon-192.png`, `icon-512.png`, `icon-512-maskable.png`) — copied to `dist/icons/` at build time.
+- **Theme / meta:** `index.html` includes `<meta name="theme-color" content="#111827">` aligned with the manifest.
+
+### Entry (`src/index.jsx`)
+
+- Calls **`registerSW({ immediate: true, … })`** inside `typeof window !== 'undefined'` with try/catch.
+- Logs basic online/offline events (`navigator.onLine`, `online` / `offline` listeners).
+- **`src/vite-env.d.js`** references **`vite-plugin-pwa/client`** for TypeScript/IDE support of `virtual:pwa-register`.
+
+### Sidebar install UX
+
+- **`usePwaInstallPrompt`** is invoked from **`layout/MainLayout/Sidebar/index.jsx`** (not only inside the button component) so `beforeinstallprompt` can be captured **before** the mobile drawer opens.
+- **`SidebarPwaInstall.jsx`** renders the **Install App** button when `showInstallButton` is true (Chromium-style browsers that expose the deferred prompt). Wrapped in an error boundary so failures hide only this UI.
+- **Mobile layout:** For `useMediaQuery(theme.breakpoints.down('md'))`, the sidebar avoids the shared **`SimpleBar`** wrapper for the menu list (see [Section 3 — `ui-component/third-party/SimpleBar.jsx`](#3-directory-structure)) so the install button stays visible at the bottom of the drawer.
+
+### Platform notes
+
+- **`beforeinstallprompt`** is **not** available on iOS Safari; the install button typically appears only on browsers that support it (e.g. Chrome on Android).
+- **`navigator.standalone`** is iOS-specific; Android ignores it.
+
+### Related source files
+
+| Path | Role |
+|------|------|
+| `vite.config.mjs` | `VitePWA({ manifest, workbox, registerType: 'autoUpdate', injectRegister: false, … })` |
+| `hooks/usePwaInstallPrompt.js` | Install prompt state + safe media-query listeners |
+| `layout/MainLayout/Sidebar/SidebarPwaInstall.jsx` | Install button UI + optional mobile debug logs |
+| `feature/authentication/controllers/useAuthController.js` | Minimal `currentUser` from `localStorage` `auth_user` (used by patrol feature; unrelated to PWA but added alongside bundle fixes) |
+
+---
+
+_Last updated: keep this document in sync whenever routing, authentication, the API contract, the feature/module layout, PWA settings, or environment variables change. Source files are the source of truth — when in doubt, re-derive this document from the codebase._

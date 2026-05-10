@@ -87,10 +87,10 @@ export default function AuthLogin() {
 
   const submitLogin = async (payload) => {
     try {
-      return await api.post('/login', payload);
+      return await api.post('/auth/login', payload);
     } catch (error) {
       if (error?.status === 404) {
-        return api.post('/auth/login', payload);
+        return api.post('/login', payload);
       }
       throw error;
     }

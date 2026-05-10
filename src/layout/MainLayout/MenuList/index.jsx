@@ -16,7 +16,7 @@ import { useGetMenuMaster } from 'api/menu';
 
 function MenuList() {
   const { menuMaster } = useGetMenuMaster();
-  const drawerOpen = menuMaster.isDashboardDrawerOpened;
+  const drawerOpen = Boolean(menuMaster?.isDashboardDrawerOpened);
 
   const [selectedID, setSelectedID] = useState('');
 

@@ -1,8 +1,8 @@
 import { createRoot } from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
 
 // project imports
 import App from 'App';
-import * as serviceWorker from 'serviceWorker';
 import reportWebVitals from 'reportWebVitals';
 import { ConfigProvider } from 'contexts/ConfigContext';
 
@@ -35,10 +35,36 @@ root.render(
   </ConfigProvider>
 );
 
-// If you want your app to work offline and load faster, you can change
-// unregister() to register() below. Note this comes with some pitfalls.
-// Learn more about service workers: https://bit.ly/CRA-PWA
-serviceWorker.unregister();
+if (typeof window !== 'undefined') {
+  try {
+    registerSW({
+      immediate: true,
+      onOfflineReady() {
+        console.info('[PWA] Offline shell ready (precache populated)');
+      },
+      onRegistered(registration) {
+        if (registration) {
+          console.info('[PWA] Service worker registered');
+        }
+      },
+      onRegisterError(error) {
+        console.warn('[PWA] Service worker registration failed', error);
+      }
+    });
+  } catch (e) {
+    console.warn('[PWA] registerSW could not run:', e);
+  }
+
+  try {
+    if (typeof navigator !== 'undefined' && 'onLine' in navigator) {
+      console.info('[PWA] Network status:', navigator.onLine ? 'online' : 'offline');
+    }
+    window.addEventListener('online', () => console.info('[PWA] Browser reports online'));
+    window.addEventListener('offline', () => console.info('[PWA] Browser reports offline'));
+  } catch (e) {
+    console.warn('[PWA] Network status listeners failed:', e);
+  }
+}
 
 // If you want to start measuring performance in your app, pass a function
 // to log results (for example: reportWebVitals(console.log))

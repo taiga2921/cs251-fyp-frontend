@@ -5,8 +5,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 
 // Redirect to login if not already on login page
 const redirectToLogin = () => {
-  if (window.location.pathname !== '/fyp/login') {
-    window.location.replace('/fyp/login');
+  if (window.location.pathname !== '/login') {
+    window.location.replace('/login');
   }
 };
 

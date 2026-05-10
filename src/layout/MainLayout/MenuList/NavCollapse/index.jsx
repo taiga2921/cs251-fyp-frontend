@@ -37,7 +37,7 @@ export default function NavCollapse({ menu, level, parentId }) {
   } = useConfig();
 
   const { menuMaster } = useGetMenuMaster();
-  const drawerOpen = menuMaster.isDashboardDrawerOpened;
+  const drawerOpen = Boolean(menuMaster?.isDashboardDrawerOpened);
 
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);

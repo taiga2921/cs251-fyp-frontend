@@ -9,6 +9,14 @@ import ProtectedRoute from './guards/ProtectedRoute';
 // dashboard routing
 const DashboardDefault = Loadable(lazy(() => import('views/dashboard/Default')));
 
+// guard routing
+const GuardPatrol = Loadable(lazy(() => import('../feature/patrol/views/PartrolHome')));
+
+// operator routing
+const OperatorPatrolLiveTracking = Loadable(lazy(() => import('../feature/patrol-live-tracking/views/PatrolLiveList')));
+const OperatorPatrolHistory = Loadable(lazy(() => import('../feature/patrol-history/views/PatrolHistoryList')));
+const OperatorPatrolHistoryView = Loadable(lazy(() => import('../feature/patrol-history/views/PatrolHistoryView')));
+
 // admin routing
 const AdminUserManagement = Loadable(lazy(() => import('../feature/management-user/views/UserList')));
 const AdminUserManagementView = Loadable(lazy(() => import('../feature/management-user/views/UserView')));
@@ -57,6 +65,40 @@ const MainRoutes = {
       element: <DashboardDefault />
     },
 
+    // ----------------- GUARD ROUTES ----------------- //
+
+    // Patrol
+    {
+      path: 'guard/patrol',
+      element: <GuardPatrol />
+    },
+
+    // ----------------- OPERATOR ROUTES ----------------- //
+
+    // Patrol
+    {
+       path: 'operator/patrol/live-tracking',
+       element: <OperatorPatrolLiveTracking />
+    },
+    {
+      path: 'operator/patrol/history',
+      element: <OperatorPatrolHistory />
+    },
+    {
+      path: 'operator/patrol/history/view/:patrolHistoryId',
+      element: <OperatorPatrolHistoryView />
+    },
+
+    // // Gate ANPR
+    // {
+    //    path: 'operator/gate/anprLive',
+    //    element: <OperatorGateLive />
+    // },
+    // {
+    //    path: 'operator/gate/history',
+    //    element: <OperatorGateHistory />
+    // },
+
     // =================== ADMIN ROUTES =================== //
 
     // Admin Routes - User Management
@@ -68,14 +110,14 @@ const MainRoutes = {
       path: 'admin/management-user/view/:userId',
       element: <AdminUserManagementView />
     },
-     {
-       path: 'admin/management-user/add',
-       element: <AdminUserManagementAdd />
-     },
-     {
-       path: 'admin/management-user/edit/:userId',
-       element: <AdminUserManagementEdit />
-     },
+    {
+      path: 'admin/management-user/add',
+      element: <AdminUserManagementAdd />
+    },
+    {
+      path: 'admin/management-user/edit/:userId',
+      element: <AdminUserManagementEdit />
+    },
 
     // Admin Routes - Zone Management
     {
@@ -93,20 +135,20 @@ const MainRoutes = {
 
     // Admin Routes - Checkpoint Management
     {
-       path: 'admin/management-zone/view/:zoneId',
-       element: <AdminCheckpointManagement />
+      path: 'admin/management-zone/view/:zoneId',
+      element: <AdminCheckpointManagement />
     },
     {
-       path: 'admin/management-checkpoint/view/:checkpointId',
-       element: <AdminCheckpointManagementView />
+      path: 'admin/management-checkpoint/view/:checkpointId',
+      element: <AdminCheckpointManagementView />
     },
     {
-       path: 'admin/management-checkpoint/add/:zoneId',
-       element: <AdminCheckpointManagementAdd />
+      path: 'admin/management-checkpoint/add/:zoneId',
+      element: <AdminCheckpointManagementAdd />
     },
     {
-       path: 'admin/management-checkpoint/edit/:zoneId/:checkpointId',
-       element: <AdminCheckpointManagementEdit />
+      path: 'admin/management-checkpoint/edit/:zoneId/:checkpointId',
+      element: <AdminCheckpointManagementEdit />
     },
 
     {

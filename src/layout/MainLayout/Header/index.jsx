@@ -22,7 +22,7 @@ export default function Header() {
   const downMD = useMediaQuery(theme.breakpoints.down('md'));
 
   const { menuMaster } = useGetMenuMaster();
-  const drawerOpen = menuMaster.isDashboardDrawerOpened;
+  const drawerOpen = Boolean(menuMaster?.isDashboardDrawerOpened);
 
   return (
     <>

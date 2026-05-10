@@ -1,17 +1,18 @@
 import { memo, useMemo } from 'react';
 
 import useMediaQuery from '@mui/material/useMediaQuery';
-import Chip from '@mui/material/Chip';
 import Drawer from '@mui/material/Drawer';
 import Stack from '@mui/material/Stack';
 import Box from '@mui/material/Box';
 
 // project imports
 import MenuCard from './MenuCard';
+import SidebarPwaInstall from './SidebarPwaInstall';
 import MenuList from '../MenuList';
 import LogoSection from '../LogoSection';
 import MiniDrawerStyled from './MiniDrawerStyled';
 
+import usePwaInstallPrompt from 'hooks/usePwaInstallPrompt';
 import useConfig from 'hooks/useConfig';
 import { drawerWidth } from 'store/constant';
 import SimpleBar from 'ui-component/third-party/SimpleBar';
@@ -24,11 +25,14 @@ function Sidebar() {
   const downMD = useMediaQuery((theme) => theme.breakpoints.down('md'));
 
   const { menuMaster } = useGetMenuMaster();
-  const drawerOpen = menuMaster.isDashboardDrawerOpened;
+  const drawerOpen = Boolean(menuMaster?.isDashboardDrawerOpened);
 
   const {
     state: { miniDrawer }
   } = useConfig();
+
+  const { deferredPrompt, showInstallButton, promptInstall, isInstalled, isStandalone } = usePwaInstallPrompt();
+  const hasDeferredPrompt = Boolean(deferredPrompt);
 
   const logo = useMemo(
     () => (
@@ -52,22 +56,64 @@ function Sidebar() {
     let drawerSX = { paddingLeft: '0px', paddingRight: '0px', marginTop: '20px' };
     if (drawerOpen) drawerSX = { paddingLeft: '16px', paddingRight: '16px', marginTop: '0px' };
 
+    const pwaInstallProps = {
+      downMD,
+      drawerOpen,
+      showInstallButton,
+      isInstalled,
+      isStandalone,
+      hasDeferredPrompt,
+      promptInstall
+    };
+
     return (
       <>
         {downMD ? (
-          <Box sx={drawerSX}>
-            <MenuList />
-            {drawerOpen && drawerContent}
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              width: '100%',
+              ...drawerSX
+            }}
+          >
+            {/*
+              Do not use SimpleBar here on small screens: it wraps content in both BrowserView and MobileView
+              (react-device-detect). On real phones isBrowser and isMobile are often both true, so the desktop
+              branch still mounts with flexGrow:1 + height:100% and steals the drawer column — pushing the PWA
+              install footer below the viewport. Native overflow matches MUI breakpoints without UA sniffing.
+            */}
+            <Stack direction="column" sx={{ flex: 1, minHeight: 0 }}>
+              <Box
+                sx={{
+                  flex: '1 1 0',
+                  minHeight: 0,
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  WebkitOverflowScrolling: 'touch'
+                }}
+              >
+                <MenuList />
+                {drawerOpen && drawerContent}
+              </Box>
+              {drawerOpen && <SidebarPwaInstall {...pwaInstallProps} />}
+            </Stack>
           </Box>
         ) : (
-          <SimpleBar sx={{ height: 'calc(100vh - 90px)', ...drawerSX }}>
-            <MenuList />
-            {drawerOpen && drawerContent}
-          </SimpleBar>
+          <Stack direction="column" sx={{ height: 'calc(100vh - 90px)', minHeight: 0, ...drawerSX }}>
+            <SimpleBar sx={{ flex: '1 1 auto', minHeight: 0 }}>
+              <MenuList />
+              {drawerOpen && drawerContent}
+            </SimpleBar>
+            {drawerOpen && <SidebarPwaInstall {...pwaInstallProps} />}
+          </Stack>
         )}
       </>
     );
-  }, [downMD, drawerOpen]);
+  }, [downMD, drawerOpen, showInstallButton, isInstalled, isStandalone, hasDeferredPrompt, promptInstall]);
 
   return (
     <Box component="nav" sx={{ flexShrink: { md: 0 }, width: { xs: 'auto', md: drawerWidth } }} aria-label="mailbox folders">
@@ -85,7 +131,13 @@ function Sidebar() {
                 width: drawerWidth,
                 bgcolor: 'background.default',
                 color: 'text.primary',
-                borderRight: 'none'
+                borderRight: 'none',
+                ...(downMD && {
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%',
+                  maxHeight: '100dvh'
+                })
               }
             }
           }}

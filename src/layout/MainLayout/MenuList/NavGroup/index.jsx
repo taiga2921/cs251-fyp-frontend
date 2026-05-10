@@ -19,7 +19,7 @@ export default function NavGroup({ item, lastItem, remItems, lastItemId, setSele
   const { pathname } = useLocation();
 
   const { menuMaster } = useGetMenuMaster();
-  const drawerOpen = menuMaster.isDashboardDrawerOpened;
+  const drawerOpen = Boolean(menuMaster?.isDashboardDrawerOpened);
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [currentItem, setCurrentItem] = useState(item);
