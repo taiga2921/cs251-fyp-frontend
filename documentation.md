@@ -1,7 +1,7 @@
 # Frontend (React + Vite) — Technical Documentation
 
 This document is the primary technical reference for the **`frontend-react-v1`** application as it exists in the repository today. It describes the actual code, configuration, and behavior found in the project. Where a detail cannot be confidently inferred from the codebase, the document states so explicitly.
-
+test
 ---
 
 ## Table of Contents
