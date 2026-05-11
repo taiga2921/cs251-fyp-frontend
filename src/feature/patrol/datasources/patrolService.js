@@ -1,73 +1,204 @@
 import api from 'api/api';
 
+/**
+ * Guard patrol HTTP adapter for Laravel `backend-laravel-v1`.
+ *
+ * Canonical patrol entity for GPS + PWA sync: **`patrol_sessions`**
+ * (`patrolId` in IndexedDB / `POST /pwa/sync` must equal `patrol_sessions.id`).
+ *
+ * Checkpoint placeholders use Laravel **`checkpoint_events`** (`pending` → later **`verified`** on reach).
+ *
+ * GPS breadcrumbs: **`POST /patrol-routes`** → **`patrol_routes`** (`patrol_session_id`, lat/lng, optional accuracy / altitude / `timestamp` ms).
+ */
+
+/** Map frontend patrol lifecycle helpers → Laravel `patrol_sessions.status`. */
+function mapStatusToPatrolSession(status) {
+  if (!status) return undefined;
+  if (status === 'in_progress') return 'active';
+  if (status === 'cancelled') return 'aborted';
+  return status;
+}
+
+/** Laravel returns nested `user` — expose `guard_id` for existing controller code. */
+function normalizePatrolSessionRecord(session) {
+  if (!session || typeof session !== 'object') return session;
+  const userId = session.user?.id ?? session.user_id ?? null;
+  return {
+    ...session,
+    guard_id: userId
+  };
+}
+
+function normalizePatrolApiEnvelope(envelope) {
+  if (!envelope?.data || typeof envelope.data !== 'object') return envelope;
+  return {
+    ...envelope,
+    data: normalizePatrolSessionRecord(envelope.data)
+  };
+}
+
+/** Builds Laravel `StorePatrolSessionRequest` body from guard UI payload. */
+function mapPatrolStorePayload(frontend) {
+  const userId = frontend.guard_id ?? frontend.user_id;
+  const startedAt = frontend.time_start ?? frontend.started_at;
+  const mappedStatus = mapStatusToPatrolSession(frontend.status);
+
+  const body = {
+    user_id: userId,
+    zone_id: frontend.zone_id,
+    started_at: startedAt,
+    ended_at: mappedStatus === 'completed' ? (frontend.time_end ?? frontend.ended_at ?? null) : null,
+    status: mappedStatus ?? 'active'
+  };
+
+  if (frontend.blockchain_record_id != null) {
+    body.blockchain_record_id = frontend.blockchain_record_id;
+  }
+
+  return body;
+}
+
+/** Builds Laravel `UpdatePatrolSessionRequest` body (`completion_percentage` has no server column — omitted). */
+function mapPatrolUpdatePayload(frontend) {
+  const body = {};
+  if (frontend.time_end != null) body.ended_at = frontend.time_end;
+  if (frontend.status != null) body.status = mapStatusToPatrolSession(frontend.status);
+  return body;
+}
+
+/**
+ * Checkpoint UI expects pseudo–checkpoint-log rows (`is_within_geofence`, `patrol_log_id`).
+ * Laravel returns checkpoint **`events`** (no lat/lng on row — GPS stays client-side until backend extended).
+ */
+function normalizeCheckpointEventAsCheckpointLog(event) {
+  if (!event || typeof event !== 'object') return event;
+  const verified = event.status === 'verified';
+  return {
+    ...event,
+    patrol_log_id: event.patrol_session_id,
+    is_within_geofence: verified,
+    actual_time: verified ? (event.detected_at ?? event.entered_at ?? null) : null
+  };
+}
+
+function normalizeCheckpointEnvelope(envelope) {
+  if (!envelope?.success || !envelope?.data) return envelope;
+  return {
+    ...envelope,
+    data: normalizeCheckpointEventAsCheckpointLog(envelope.data)
+  };
+}
+
+/**
+ * Normalize `/zones` JSON into a zone array.
+ * Handles: `[]`, `{ data: [] }`, Laravel pagination `{ data: { data: [], links, meta } }`,
+ * and envelopes `{ success, message, data: … }` by unwrapping `.data` until an array is found.
+ */
+function normalizeZonesResponse(body) {
+  let cur = body;
+  for (let depth = 0; depth < 10; depth++) {
+    if (cur == null) return [];
+    if (Array.isArray(cur)) return cur;
+    if (typeof cur === 'object' && Object.prototype.hasOwnProperty.call(cur, 'data')) {
+      cur = cur.data;
+      continue;
+    }
+    return [];
+  }
+  return [];
+}
+
+/**
+ * Unwrap Laravel checkpoint list payloads into a plain array.
+ * Supports: raw array, `{ data: [...] }`, paginator `{ data: { data: [...], links, meta } }`,
+ * and triple-nested `{ data: { data: { data: [...] } } }`.
+ */
+function extractCheckpointsArray(payload) {
+  if (payload == null) {
+    console.warn('[patrolService] getAllCheckpointsByZoneId: empty response body; using [].');
+    return [];
+  }
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data?.data?.data)) return payload.data.data.data;
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
+  if (Array.isArray(payload?.data)) return payload.data;
+  console.warn('[patrolService] Unexpected checkpoints response shape; using [].', payload);
+  return [];
+}
+
 const patrolService = {
-   // Get all zones
-   getAllZones: async () => {
-      try {
-         const response = await api.get('/zones');
-         return response.data.data;
-      } catch (error) {
-         throw error;
-      }
-   },
+  getAllZones: async () => {
+    try {
+      const response = await api.get('/zones');
+      return normalizeZonesResponse(response?.data);
+    } catch (error) {
+      throw error;
+    }
+  },
 
-   // Create patrol
-   createPatrol: async (patrolData) => {
-      try {
-         const response = await api.post('/patrol-logs', patrolData);
-         return response.data;
-      } catch (error) {
-         throw error;
-      }
-   },
+  createPatrol: async (patrolData) => {
+    try {
+      const response = await api.post('/patrol-sessions', mapPatrolStorePayload(patrolData));
+      return normalizePatrolApiEnvelope(response.data);
+    } catch (error) {
+      throw error;
+    }
+  },
 
-   // Update patrol
-   updatePatrol: async (id, patrolData) => {
-      try {
-         // Make sure this is the correct endpoint
-         const response = await api.put(`/patrol-logs/${id}`, patrolData); // or /patrols/${id}
-         return response.data;
-      } catch (error) {
-         throw error;
-      }
-   },
+  updatePatrol: async (id, patrolData) => {
+    try {
+      const response = await api.put(`/patrol-sessions/${id}`, mapPatrolUpdatePayload(patrolData));
+      return normalizePatrolApiEnvelope(response.data);
+    } catch (error) {
+      throw error;
+    }
+  },
 
-   // Get all checkpoints by zone id
-   getAllCheckpointsByZoneId: async (id) => {
-      try {
-         const response = await api.get(`/checkpoints?zone_id=${id}`);
-         return response.data.data;
-      } catch (error) {
-         throw error;
-      }
-   },
+  getAllCheckpointsByZoneId: async (id) => {
+    try {
+      const response = await api.get(`/checkpoints?zone_id=${id}`);
+      return extractCheckpointsArray(response?.data);
+    } catch (error) {
+      throw error;
+    }
+  },
 
-   createCheckpointLog: async (data) => {
-      try {
-         const response = await api.post('/patrol-checkpoint-logs', data);
-         return response.data;
-      } catch (error) {
-         throw error;
-      }
-   },
+  createCheckpointLog: async (data) => {
+    try {
+      const patrolSessionId = data.patrol_session_id ?? data.patrol_log_id;
+      const response = await api.post('/checkpoint-events', {
+        patrol_session_id: patrolSessionId,
+        checkpoint_id: data.checkpoint_id,
+        status: 'pending'
+      });
+      return normalizeCheckpointEnvelope(response.data);
+    } catch (error) {
+      throw error;
+    }
+  },
 
-   updateCheckpointLog: async (logId, data) => {
-      try {
-         const response = await api.put(`/patrol-checkpoint-logs/${logId}`, data);
-         return response.data;
-      } catch (error) {
-         throw error;
+  updateCheckpointLog: async (logId, data) => {
+    try {
+      const body = {};
+      if (data.is_within_geofence === true) {
+        body.status = 'verified';
+        body.detected_at = data.actual_time ?? new Date().toISOString();
       }
-   },
+      const response = await api.patch(`/checkpoint-events/${logId}`, body);
+      return normalizeCheckpointEnvelope(response.data);
+    } catch (error) {
+      throw error;
+    }
+  },
 
-   createPatrolRoute: async (data) => {
-      try {
-         const response = await api.post('/patrol-routes', data);
-         return response.data;
-      } catch (error) {
-         throw error;
-      }
-   }
+  createPatrolRoute: async (data) => {
+    try {
+      const response = await api.post('/patrol-routes', data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
 };
 
 export default patrolService;

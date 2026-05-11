@@ -1,7 +1,7 @@
 # Frontend (React + Vite) — Technical Documentation
 
 This document is the primary technical reference for the **`frontend-react-v1`** application as it exists in the repository today. It describes the actual code, configuration, and behavior found in the project. Where a detail cannot be confidently inferred from the codebase, the document states so explicitly.
-test
+
 ---
 
 ## Table of Contents
@@ -39,6 +39,8 @@ The frontend currently provides:
 - Sample dashboard widgets (charts, cards) inherited from the Berry template.
 - Theme customization (light scheme + CSS variables) with font family / border radius adjustments persisted to `localStorage`.
 - **Progressive Web App (PWA)** support via `vite-plugin-pwa` (service worker precache, web app manifest, optional **Install App** UI in the sidebar when the browser fires `beforeinstallprompt`).
+- **PWA client layer (`src/pwa/`)** — offline-aware UX (`NetworkSnackbar`), Dexie **IndexedDB** for patrol location logs and a **sync queue**, a **`flushSyncQueue`** sync engine posting to `POST /api/pwa/sync`, and shared **`useNetworkStatus`** (browser online/offline events).
+- **Patrol module (`feature/patrol`)** — single guard page **`views/PartrolHome.jsx`** + **`usePatrolController`**: creates Laravel **`patrol_sessions`** and **`checkpoint-events`** placeholders, posts GPS breadcrumbs to **`POST /patrol-routes`**, and drives live GPS only via **`feature/patrol/services/geolocationService`** ( **`saveLocationLog`** → Dexie + **`sync_queue`**). **`components/PatrolTracking.jsx`** is presentational (no watch lifecycle); **`components/PatrolPwaStatusPanel.jsx`** shows online/offline, tracking chip, Dexie counts, sync-queue pending/failed, and **Retry Sync** (**`flushSyncQueue`**). Raw **`navigator.geolocation`** is not used from the controller; primitives live in **`pwa/geolocationService`**.
 
 ### Core Functionality
 
@@ -51,13 +53,17 @@ The frontend currently provides:
 | User Management — list | Implemented | `feature/management-user/views/UserList.jsx`. |
 | User Management — view | Implemented | `feature/management-user/views/UserView.jsx`. |
 | User Management — add/edit | **Code present but routes disabled** | Components import non-existent files (`ui-component/FieldContainer`, `SuccessDialog`, etc.) and routes are commented out in `MainRoutes.jsx`. |
-| Zone / Camera / Checkpoint management | **Partially implemented** | Zone module now includes service/repository/controller/view files and calls backend `/zones`; camera/checkpoint modules remain incomplete. |
+| Zone / Camera / Checkpoint management | **Partially implemented** | Zone module includes service/repository/controller/view files and calls backend `/zones`; the **guard patrol** module uses `/checkpoints`, Laravel **`/checkpoint-events`** (via `patrolService`), and **`/patrol-sessions`**. Dedicated management-checkpoint UI exists separately. |
+| Patrol (guard) | **Implemented (functional)** | `feature/patrol` — Laravel **`patrol_sessions.id`** is end-to-end **`patrolId`** (Dexie **`location_logs.patrolId`** and **`POST /pwa/sync`** payload **`patrolId`** match); checkpoints via **`checkpoint-events`**; route crumbs via **`POST /patrol-routes`**; GPS only **`usePatrolController`** + **`services/geolocationService`**; **`PatrolPwaStatusPanel`**. See [Section 15](#15-progressive-web-app-pwa). |
+| PWA offline / sync | **Partially implemented** | IndexedDB + sync queue + global **`NetworkSnackbar`**; with Laravel **`backend-laravel-v1`**, **`POST /api/pwa/sync`** (**JWT**) drains **`location_log`** rows idempotently. Retry Sync + auto-flush on **`online`**. No WebSocket / Background Sync / push yet. |
 | Theme Customization | Implemented | Font family + border radius drawer (toggle button itself is currently commented out). |
 | Notifications | UI-only | Static demo data. |
 
 ### Main Modules / Features (as found in `src/`)
 
-- `feature/management-user` — only fully-implemented business module.
+- `feature/management-user` — primary CRUD reference module.
+- `feature/patrol` — guard patrol session UI + **`usePatrolController`** + Laravel patrol/checkpoint/route APIs + patrol geolocation service.
+- `pwa/` — Dexie IndexedDB, offline sync queue flush, network hook, browser geolocation primitives.
 - `views/dashboard/Default` — demo dashboard.
 - `views/pages/authentication` — Login + Register pages.
 - `views/utilities` — Typography / Color / Shadow showcase pages.
@@ -85,6 +91,7 @@ The frontend currently provides:
 | Yarn | `4.10.3` (`packageManager`) |
 | `vite-plugin-pwa` | `^1.3.0` (devDependency) — Workbox service worker + web manifest generation. |
 | `workbox-window` | `^7.4.1` (devDependency) — Used by the PWA client registration path. |
+| `dexie` | `^4.x` (runtime) — IndexedDB wrapper for `src/pwa/db.js` (location logs, sync queue, patrol_sessions, notifications). |
 
 ### UI Libraries / Frameworks Used
 
@@ -106,11 +113,12 @@ The frontend talks to the Laravel API in `backend-laravel-v1`. The relationship 
 
 - **Base URL:** `import.meta.env.VITE_API_BASE_URL` (default `http://localhost:8000/api`).
 - **Auth scheme:** JWT bearer token (`Authorization: Bearer <token>`); token saved in `localStorage` under key `access_token`.
-- **Endpoints actually called from the frontend:**
+- **Endpoints actually called from the frontend (non-exhaustive; see [Section 5](#5-api-integration)):**
   - `POST /login` (with fallback to `POST /auth/login` on 404) — login.
   - `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}`, `DELETE /users/{id}` — user CRUD.
+  - Zone, patrol, checkpoint, and **PWA sync** endpoints — see Section 5 tables.
 
-No other backend endpoints are currently invoked from the frontend.
+The Laravel backend exposes **`POST /api/pwa/sync`** (JWT **`auth:api`**) for the client sync engine to drain queued location payloads. The guard patrol module creates **`patrol_sessions`** via **`POST /patrol-sessions`** and passes that session **`id`** as **`patrolId`** into Dexie / sync payloads so **`pwa/sync`** validation matches **`patrol_sessions.id`**.
 
 ---
 
@@ -125,7 +133,7 @@ No other backend endpoints are currently invoked from the frontend.
 │   ┌───────────────────────────────────────────────┐    │
 │   │ index.jsx — createRoot; registerSW() (PWA SW)  │    │
 │   │   └── ConfigProvider (Context + localStorage)  │    │
-│   │        └── App.jsx                             │    │
+│   │        └── App.jsx (+ global NetworkSnackbar)  │    │
 │   │             └── ThemeCustomization (MUI Theme) │    │
 │   │                  └── NavigationScroll          │    │
 │   │                       └── RouterProvider       │    │
@@ -295,7 +303,9 @@ frontend-react-v1/
 ├── documentation.md          # ← this file
 ├── public/                   # Static files copied to dist root (favicon, `icons/` for PWA manifest)
 └── src/
-    ├── App.jsx               # Mounts ThemeCustomization + RouterProvider
+    ├── App.jsx               # ThemeCustomization + NavigationScroll + NetworkSnackbar + RouterProvider
+    ├── components/           # Shared components (e.g. NetworkSnackbar for offline/online feedback)
+    ├── pwa/                  # PWA client layer: Dexie DB, location logs, sync engine, network hook, browser geolocation infra
     ├── index.jsx             # createRoot + ConfigProvider + fonts + `registerSW` (vite-plugin-pwa)
     ├── config.js             # DASHBOARD_PATH, fontFamily, borderRadius defaults
     ├── reportWebVitals.js
@@ -362,7 +372,23 @@ feature/management-user/
     └── UserEdit.jsx                 # Imports unresolved components — see Section 13
 ```
 
-The other feature folders (`authentication/`, `management-camera/`, `management-checkpoint/`) remain sparse/incomplete; `management-zone/` now includes service/repository/controller/view files.
+The other feature folders (`authentication/`, `management-camera/`, `management-checkpoint/`) vary in completeness; `management-zone/` includes service/repository/controller/view files.
+
+**Patrol (`feature/patrol/`):** `views/PartrolHome.jsx` (sole patrol UI), `controllers/usePatrolController.js`, `repositories/patrolRepository.js`, `datasources/patrolService.js` ( **`/patrol-sessions`**, **`/checkpoint-events`**, **`/patrol-routes`** ), `services/geolocationService.js` (domain GPS — **`pwa/locationLogService`** + **`pwa/geolocationService`**), presentational `components/PatrolTracking.jsx`, and **`components/PatrolPwaStatusPanel.jsx`** (Dexie + sync-queue telemetry, 3s polling; **no** GPS start/stop). **Patrol ID contract:** Dexie **`patrolId`** and PWA sync **`patrolId`** must equal Laravel **`patrol_sessions.id`** (not legacy **`patrol-logs`**). GPS is orchestrated only from **`usePatrolController`** via **`startPatrolTracking`**, **`stopPatrolTracking`**, and **`capturePatrolLocationSnapshot`** in `services/geolocationService.js`. **`GET /zones`** for the guard zone dropdown is normalized in **`patrolService`** / **`PatrolRepository`** to an **array of zones** (see [Patrol zone list (`GET /zones`)](#patrol-zone-list-get-zones)); **`PartrolHome`** keeps a stable **`PatrolRepository`** instance via **`useRef`** so zone loading does not refetch in a loop.
+
+### `src/pwa/` (PWA client infrastructure)
+
+| File | Purpose |
+|------|---------|
+| `db.js` | Dexie database **`PatrolPWA`** (versions 1–3): stores **`location_logs`**, **`sync_queue`** (with `payload`, `retryCount`, `lastAttempt`), **`patrol_sessions`**, **`notifications`**. |
+| `locationLogService.js` | **`saveLocationLog`** — UUID id, lat/lng/accuracy/source/trackingState/speed/heading/timestamp/syncStatus; enqueues matching **`sync_queue`** payload for `/pwa/sync`. Exports **`LOCATION_SOURCE`**, **`TRACKING_STATE`**, sync constants. |
+| `syncService.js` | **`flushSyncQueue`** — serial flush: pending/failed queue rows → status **`syncing`** → **`POST /pwa/sync`** with payload → **`synced`** or **`failed`** (+ retryCount/lastAttempt); updates **`location_logs.syncStatus`** when type is `location_log`. Guarded against concurrent flushes. |
+| `useNetworkStatus.js` | React hook: **`navigator.onLine`** + **`online`**/**`offline`** events; on **`online`** calls **`flushSyncQueue()`** (errors contained). |
+| `geolocationService.js` | **Browser-only** helpers: **`getCurrentPosition`**, **`watchPosition`**, **`clearWatch`**, **`normalizeGeolocationError`**, **`DEFAULT_GEOLOCATION_OPTIONS`**. No IndexedDB. |
+
+### `src/components/NetworkSnackbar.jsx`
+
+Global MUI **`Snackbar`** + **`Alert`** (mounted from **`App.jsx`**) — warns when offline, confirms when back online. Uses **`useNetworkStatus`** from `pwa/useNetworkStatus.js`.
 
 ### `src/views/`
 
@@ -678,6 +704,26 @@ It also normalizes errors via `buildServiceError()`:
 
 Like `userService`, `zoneService` maps `401` and `403` to user-friendly service errors (`Unauthorized...` / `Forbidden...`) and rethrows with `status`, `data`, and `originalError`.
 
+`src/feature/patrol/datasources/patrolService.js` (via **`PatrolRepository`** / **`usePatrolController`**):
+
+| Method | HTTP call | Notes |
+|--------|-----------|-------|
+| `getAllZones` | `GET /zones` | Shared zones list for starting a patrol. Returns **`normalizeZonesResponse(response.data)`** — an **array** of zone objects (see below). Not the same as **`zoneService.getAllZones`**, which returns the raw JSON body for admin screens. |
+| `createPatrol` | `POST /patrol-sessions` | Creates **`patrol_sessions`** row; returned **`id`** is **`patrolId`** for PWA location logs + **`POST /pwa/sync`**. |
+| `updatePatrol` | `PUT /patrol-sessions/{id}` | Maps `time_end` → **`ended_at`**, lifecycle **`status`** → Laravel enums (`in_progress` → **`active`**, **`cancelled`** → **`aborted`**). |
+| `getAllCheckpointsByZoneId` | `GET /checkpoints?zone_id={id}` | Checkpoints for the selected zone. |
+| `createCheckpointLog` | `POST /checkpoint-events` | Placeholder rows **`pending`** (`patrol_session_id`, `checkpoint_id`). Response normalized to pseudo checkpoint-log shape for UI. |
+| `updateCheckpointLog` | `PATCH /checkpoint-events/{id}` | Marks **`verified`** + **`detected_at`** when reached (server has no lat/lng columns on `checkpoint_events` yet). |
+| `createPatrolRoute` | `POST /patrol-routes` | GPS breadcrumbs (`patrol_session_id`, lat/lng, optional accuracy / altitude / `timestamp` ms). |
+
+#### Patrol zone list (`GET /zones`)
+
+Laravel **`ZoneController@index`** returns **`{ success, message, data }`** where **`data`** is the paginator shape **`{ data: [...zones], links, meta }`**. **`patrolService.normalizeZonesResponse`** walks chained **`.data`** keys (bounded depth) until it reaches an **array**, so these shapes all yield a zone array: **`[]`**, **`{ data: [] }`**, **`{ data: { data: [], links, meta } }`**, **`{ success, message, data: { data: [] } }`**. **`PatrolRepository.getAllZones`** returns **`[]`** if the datasource ever returns a non-array. **`usePatrolController.loadZones`** maps zones to **`zoneOptions`**; on fetch failure it logs and sets **`zoneOptions`** to **`[]`** (empty dropdown, no crash).
+
+**PWA offline sync** — `src/pwa/syncService.js` calls **`api.post('/pwa/sync', payload)`** with each **`sync_queue`** row’s **`payload`** (must align with backend **`SyncPwaLocationLogRequest`**: **`patrolId`** = **`patrol_sessions.id`**). Successful responses mark the queue row **`synced`** and, for **`location_log`** entries, set **`location_logs.syncStatus`** to **`synced`**.
+
+**`patrolRepository.createPatrolRoute`** returns the **full** Laravel-style envelope (**`{ success, message, data }`**) from **`patrolService`** so **`usePatrolController`** can gate UI updates on **`response.success`**.
+
 ### Authentication Token Handling
 
 - Token is stored in `localStorage` under the key `access_token` (`utils/auth.js#AUTH_TOKEN_KEY`).
@@ -724,6 +770,13 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 | `zoneService.createZone` | `POST` | `/zones` |
 | `zoneService.updateZone` | `PATCH` | `/zones/{id}` |
 | `zoneService.deleteZone` | `DELETE` | `/zones/{id}` |
+| `patrolService` / repository | `GET` | `/zones` (via patrol), `/checkpoints?zone_id=…` |
+| `patrolService.createPatrol` | `POST` | `/patrol-sessions` |
+| `patrolService.updatePatrol` | `PUT` | `/patrol-sessions/{id}` |
+| `patrolService.createCheckpointLog` | `POST` | `/checkpoint-events` |
+| `patrolService.updateCheckpointLog` | `PATCH` | `/checkpoint-events/{logId}` |
+| `patrolService.createPatrolRoute` | `POST` | `/patrol-routes` |
+| `syncService.flushSyncQueue` | `POST` | `/pwa/sync` |
 
 ### Frontend ↔ Laravel Communication
 
@@ -1207,6 +1260,7 @@ No secrets are currently stored in `.env` or `src/`. Be careful to keep this tru
 | `slick-carousel` | 1.8.1 | Listed in `package.json`; no `import` detected in `src/` (template residue). |
 | `swr` | 2.3.7 | Used in `api/menu.js` as a local key/value store. |
 | `web-vitals` | 5.1.0 | Optional performance reporting (`reportWebVitals.js`). |
+| `dexie` | ^4.4.x | IndexedDB abstraction for `src/pwa/db.js` (patrol logs + sync queue). |
 | `yup` | 1.7.1 | Listed but **not currently imported** (no schemas defined). |
 | `@fontsource/inter` / `@fontsource/poppins` / `@fontsource/roboto` | 5.x | Self-hosted fonts loaded in `index.jsx`. |
 
@@ -1234,7 +1288,7 @@ No secrets are currently stored in `.env` or `src/`. Be careful to keep this tru
 | UI primitives | `@mui/material`, `@mui/icons-material`, `@emotion/*`, `@tabler/icons-react` |
 | Routing | `react-router`, `react-router-dom` |
 | State / data | `swr` (very limited use), local `useState` |
-| PWA | `vite-plugin-pwa`, `workbox-window` |
+| PWA | `vite-plugin-pwa`, `workbox-window`, `dexie` (`src/pwa/`) |
 | Forms / validation | Hand-written (yup is unused) |
 | Charts | `apexcharts`, `react-apexcharts` |
 | Utilities | `lodash-es`, `react-device-detect`, `material-ui-popup-state` |
@@ -1396,6 +1450,10 @@ The "Logout" `ListItemButton` in `Header/ProfileSection/index.jsx` has no handle
 
 `feature/authentication`, `feature/management-camera`, and `feature/management-checkpoint` are still incomplete. Zone service wiring exists, but route/menu parity for all admin management screens should still be validated end-to-end.
 
+### Patrol GPS singleton (`feature/patrol/services/geolocationService.js`)
+
+Patrol browser tracking uses a **single** module-scope **`watchPosition`** id. Only **`usePatrolController`** starts or stops it; **`PatrolTracking.jsx`** is presentational and does not call **`startPatrolTracking`** / **`stopPatrolTracking`** (see **`PartrolHome.jsx`** composition).
+
 ### `ErrorBoundary` Is Defined but Not Wired
 
 `src/routes/ErrorBoundary.jsx` defines an HTTP-status-aware error UI, but neither route group sets `errorElement`. Therefore the React Router default error boundary is what users see on routing errors.
@@ -1498,6 +1556,8 @@ Suggestions that are actionable given the current implementation.
 
 The app uses **`vite-plugin-pwa`** with the **`generateSW`** strategy. Workbox precaches hashed assets; navigation falls back to `index.html` for SPA routing. Registration uses **`import { registerSW } from 'virtual:pwa-register'`** in `src/index.jsx` with `injectRegister: false` in the Vite plugin (registration is explicit in application code, not auto-injected into HTML).
 
+Additionally, **`src/pwa/`** holds **client-side** persistence and sync plumbing (Dexie / IndexedDB), **network status** hooks, and **browser geolocation** primitives used by the patrol feature. **`src/feature/patrol/services/geolocationService.js`** implements **patrol-domain** GPS orchestration (singleton watch lifecycle, **`saveLocationLog`**) on top of those primitives. **`PartrolHome`** mounts **`PatrolPwaStatusPanel`** (reads **`pwa/db.js`**, **`flushSyncQueue`**, **`useNetworkStatus`**) without starting or stopping GPS.
+
 ### Manifest & icons
 
 - **Manifest** filename: `manifest.webmanifest` (emitted to `dist/`).
@@ -1509,6 +1569,44 @@ The app uses **`vite-plugin-pwa`** with the **`generateSW`** strategy. Workbox p
 - Calls **`registerSW({ immediate: true, … })`** inside `typeof window !== 'undefined'` with try/catch.
 - Logs basic online/offline events (`navigator.onLine`, `online` / `offline` listeners).
 - **`src/vite-env.d.js`** references **`vite-plugin-pwa/client`** for TypeScript/IDE support of `virtual:pwa-register`.
+
+### Offline UI & connectivity (`NetworkSnackbar`, `useNetworkStatus`)
+
+- **`src/components/NetworkSnackbar.jsx`** is mounted globally from **`App.jsx`**. It shows a warning-style snackbar when the browser goes offline and a success-style snackbar when connectivity returns.
+- **`src/pwa/useNetworkStatus.js`** exposes a boolean derived from **`navigator.onLine`** plus **`window`** **`online`** / **`offline`** listeners.
+- On **`online`**, **`flushSyncQueue()`** from **`src/pwa/syncService.js`** runs (errors are logged only — UI must not crash).
+
+### IndexedDB (Dexie) & sync queue
+
+- **`src/pwa/db.js`** defines database **`PatrolPWA`** with schema migrations (**v1–v3**). Tables include **`location_logs`** (indexed fields include **`syncStatus`**, **`source`**, **`trackingState`** where applicable), **`sync_queue`** (**`payload`**, **`retryCount`**, **`lastAttempt`**), **`patrol_sessions`**, and **`notifications`** (schemas reserved for future use).
+- **`src/pwa/locationLogService.js`** — **`saveLocationLog`** assigns **`crypto.randomUUID()`**, normalizes **`LOCATION_SOURCE`** (**`live` \| `resume` \| `manual`**) and **`TRACKING_STATE`** (**`active` \| `resumed` \| `offline`**), stores lat/lng/accuracy/speed/heading/timestamp, sets **`syncStatus: pending`**, and inserts a companion **`sync_queue`** row whose **`payload`** mirrors fields sent later to **`POST /pwa/sync`**.
+- **`src/pwa/syncService.js`** — **`flushSyncQueue`** selects **`sync_queue`** rows with status **`pending`** or **`failed`**, sorts by **`createdAt`**, processes **one row at a time** (guarded so only one flush runs concurrently): sets **`syncing`**, posts **`payload`** to **`/pwa/sync`**, on success marks **`synced`** and updates **`location_logs.syncStatus`** for **`location_log`** types; on failure marks **`failed`**, increments **`retryCount`**, sets **`lastAttempt`**. Does **not** yet implement WebSockets, Background Sync, or push notifications.
+
+### Geolocation layering (infrastructure vs patrol domain)
+
+| Layer | Module | Responsibility |
+|-------|--------|----------------|
+| **Infrastructure** | **`src/pwa/geolocationService.js`** | **`navigator.geolocation`** only: **`getCurrentPosition`**, **`watchPosition`**, **`clearWatch`**, **`normalizeGeolocationError`**, **`DEFAULT_GEOLOCATION_OPTIONS`** (`enableHighAccuracy`, `timeout`, `maximumAge`). No IndexedDB / patrol semantics. |
+| **Patrol domain** | **`src/feature/patrol/services/geolocationService.js`** | **`startPatrolTracking`**, **`stopPatrolTracking`**, **`capturePatrolLocationSnapshot`** (returns **`{ position, record }`**), **`calculateDistance`** (Haversine), **`isPatrolTrackingActive`**. Owns a **singleton** browser watch id; each persisted fix goes through **`saveLocationLog`** (PWA data layer). Supports **`skipInitialPersistAndFetch`** when the controller already ran **`capturePatrolLocationSnapshot`**. |
+
+**`usePatrolController`** (`feature/patrol/controllers/usePatrolController.js`) starts tracking by:
+
+1. **`capturePatrolLocationSnapshot`** with **`LOCATION_SOURCE.LIVE`** (IndexedDB + queue).
+2. Updating UI / checkpoint proximity / **`recordPatrolRoute`** on that first **`GeolocationPosition`**.
+3. **`startPatrolTracking`** with **`skipInitialPersistAndFetch: true`** so subsequent fixes use the same patrol service watch and persistence path.
+
+It stops tracking with **`stopPatrolTracking`** on complete/unmount (replacing previous **`navigator.geolocation.clearWatch`** + local **`watchId`** state).
+
+**Patrol ↔ Laravel ↔ PWA alignment**
+
+| Concept | Frontend | Laravel |
+|---------|----------|---------|
+| Canonical patrol row | **`patrols.data.id`** from **`POST /patrol-sessions`** | **`patrol_sessions.id`** |
+| Dexie **`location_logs.patrolId`** | Same UUID as patrol session | **`location_logs.patrol_session_id`** on sync |
+| **`POST /pwa/sync`** **`patrolId`** | Same UUID | Must **`exists:patrol_sessions,id`** |
+| Route breadcrumbs | **`POST /patrol-routes`** with **`patrol_session_id`** | **`patrol_routes.patrol_session_id`** |
+
+Geofence **auto-completion** for checkpoints remains **implementation-dependent**: the controller still computes distances vs a radius; Laravel **`checkpoint_events`** store **`verified`** / **`detected_at`** without per-event lat/lng columns today — confirm against guard UX expectations.
 
 ### Sidebar install UX
 
@@ -1528,8 +1626,15 @@ The app uses **`vite-plugin-pwa`** with the **`generateSW`** strategy. Workbox p
 | `vite.config.mjs` | `VitePWA({ manifest, workbox, registerType: 'autoUpdate', injectRegister: false, … })` |
 | `hooks/usePwaInstallPrompt.js` | Install prompt state + safe media-query listeners |
 | `layout/MainLayout/Sidebar/SidebarPwaInstall.jsx` | Install button UI + optional mobile debug logs |
-| `feature/authentication/controllers/useAuthController.js` | Minimal `currentUser` from `localStorage` `auth_user` (used by patrol feature; unrelated to PWA but added alongside bundle fixes) |
+| `App.jsx` | Global **`NetworkSnackbar`** |
+| `pwa/db.js`, `pwa/locationLogService.js`, `pwa/syncService.js`, `pwa/useNetworkStatus.js`, `pwa/geolocationService.js` | Offline storage, sync POST (**`/pwa/sync`**), connectivity hook, browser geo primitives |
+| `feature/patrol/services/geolocationService.js` | Patrol GPS orchestration + **`saveLocationLog`** |
+| `feature/patrol/controllers/usePatrolController.js` | Patrol workflow; sole starter/stopper of patrol GPS (not raw **`navigator.geolocation`**) |
+| `feature/patrol/components/PatrolPwaStatusPanel.jsx` | Patrol-page PWA/GPS status (Dexie queries ~3s, Retry **`flushSyncQueue`**) |
+| `feature/patrol/components/PatrolTracking.jsx` | Presentational checkpoint list + coords (**no** **`startPatrolTracking`** / **`stopPatrolTracking`**) |
+| `feature/patrol/views/PartrolHome.jsx` | Only guard patrol route UI; composes **`PatrolTracking`** + **`PatrolPwaStatusPanel`** |
+| `feature/authentication/controllers/useAuthController.js` | Minimal `currentUser` from `localStorage` `auth_user` (used by patrol feature; unrelated to service worker install) |
 
 ---
 
-_Last updated: keep this document in sync whenever routing, authentication, the API contract, the feature/module layout, PWA settings, or environment variables change. Source files are the source of truth — when in doubt, re-derive this document from the codebase._
+_Last updated: document revised for patrol **`patrol_sessions`** / **`patrolId`** contract with **`POST /api/pwa/sync`**, **`POST /patrol-routes`** breadcrumbs, single GPS orchestration path (**`usePatrolController`** + **`PatrolTracking`** presentational-only), **`PatrolPwaStatusPanel`**, PWA IndexedDB/sync (**`dexie`**, **`syncService`**, **`locationLogService`**), global **`NetworkSnackbar`**, layered geolocation (**`pwa/geolocationService`** vs **`feature/patrol/services/geolocationService`**), and **`patrolService.normalizeZonesResponse`** / **`PatrolRepository.getAllZones`** / **`loadZones`** behavior for **`GET /zones`**. **`feature/patrol-history`** may still reference legacy patrol HTTP paths — guard **`feature/patrol`** is the Laravel-aligned reference. Keep this file in sync whenever routing, authentication, API contracts, feature modules, PWA settings, or environment variables change. Source files remain the source of truth._

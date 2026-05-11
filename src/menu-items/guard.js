@@ -7,7 +7,7 @@ const icons = {
   IconAlertOctagon,
   IconCompass,
   IconHistory,
-  IconShieldChevron,
+  IconShieldChevron
 };
 
 // ==============================|| MENU ITEMS - GUARD ||============================== //
@@ -17,13 +17,13 @@ const guard = {
   title: 'Guard',
   type: 'group',
   children: [
-    // {
-    //   id: 'guard-patrol',
-    //   title: 'Patrol',
-    //   type: 'item',
-    //   url: '/guard/patrol',
-    //   icon: icons.IconShieldChevron,
-    // },
+    {
+      id: 'guard-patrol',
+      title: 'Patrol',
+      type: 'item',
+      url: '/guard/patrol',
+      icon: icons.IconShieldChevron
+    }
     // {
     //   id: 'guard-report',
     //   title: 'Report',

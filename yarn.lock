@@ -3578,6 +3578,7 @@ __metadata:
     apexcharts: "npm:5.3.6"
     date-fns: "npm:^4.1.0"
     dayjs: "npm:^1.11.20"
+    dexie: "npm:^4.4.2"
     eslint: "npm:9.39.1"
     eslint-config-prettier: "npm:10.1.8"
     eslint-plugin-jsx-a11y: "npm:6.10.2"
@@ -4070,6 +4071,13 @@ __metadata:
   bin:
     detect-libc: ./bin/detect-libc.js
   checksum: 10c0/4da0deae9f69e13bc37a0902d78bf7169480004b1fed3c19722d56cff578d16f0e11633b7fbf5fb6249181236c72e90024cbd68f0b9558ae06e281f47326d50d
+  languageName: node
+  linkType: hard
+
+"dexie@npm:^4.4.2":
+  version: 4.4.2
+  resolution: "dexie@npm:4.4.2"
+  checksum: 10c0/b6171347e8d7579600cc4b2ab4b1e3422991451f8f69c926caa15bdf223be9ca8ae86da87e141a2f626fa5d4647c6a9b917ffaa3f878be17c37c4c7533d5eaa6
   languageName: node
   linkType: hard
 

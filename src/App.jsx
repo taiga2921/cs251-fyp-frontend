@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import router from 'routes';
 
 // project imports
+import NetworkSnackbar from 'components/NetworkSnackbar';
 import NavigationScroll from 'layout/NavigationScroll';
 
 import ThemeCustomization from 'themes';
@@ -17,6 +18,7 @@ export default function App() {
     <ThemeCustomization>
       <NavigationScroll>
         <>
+          <NetworkSnackbar />
           <RouterProvider router={router} />
         </>
       </NavigationScroll>

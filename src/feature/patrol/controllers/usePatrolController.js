@@ -1,12 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LOCATION_SOURCE } from 'pwa/locationLogService';
 import { useAuthController } from '../../authentication/controllers/useAuthController';
+import {
+  capturePatrolLocationSnapshot,
+  calculateDistance as haversineDistanceMeters,
+  startPatrolTracking,
+  stopPatrolTracking
+} from '../services/geolocationService';
 
 /**
  * Custom hook for managing patrol operations including:
  * - Patrol creation and management
- * - Real-time geolocation tracking
- * - Checkpoint geofence detection
+ * - Real-time geolocation tracking (via `feature/patrol/services/geolocationService` — not raw `navigator.geolocation`)
+ * - Checkpoint proximity checks (auto-completion deferred — see milestone notes)
  * - Progress monitoring
  * - Patrol route footprint tracking
  */
@@ -46,14 +53,17 @@ export const usePatrolController = (repository) => {
   /** Patrol routes data */
   const [patrolRoutes, setPatrolRoutes] = useState([]); // Guard's geolocation footprint
 
-  /** Geolocation tracking */
-  const [watchId, setWatchId] = useState(null); // Geolocation watch ID for cleanup
+  /** Geolocation tracking — browser watch is owned by patrol geolocationService singleton */
   const [currentPosition, setCurrentPosition] = useState(null); // Latest GPS position
   const [locationDisplay, setLocationDisplay] = useState(''); // Formatted location string for UI
 
   const [distanceCalc, setDistanceCalc] = useState();
   const checkpointsRef = useRef([]);
   const checkpointLogsRef = useRef([]);
+  /** Set synchronously when a patrol session is created — `patrols` state is stale inside the same async start flow */
+  const activePatrolSessionIdRef = useRef(null);
+  /** Last coords POSTed to `/patrol-routes` — avoids stale `patrolRoutes` closure in the GPS watch */
+  const lastPostedRouteCoordsRef = useRef(null);
 
   const [patrols, setPatrols] = useState([]);
 
@@ -67,6 +77,29 @@ export const usePatrolController = (repository) => {
 
   /** Minimum distance between route points (in meters) to avoid too many points */
   const MIN_ROUTE_DISTANCE = 5;
+
+  // ============== DATA LOADING ==============
+
+  /**
+   * Fetch all available zones from the repository
+   * Transforms data for dropdown compatibility
+   */
+  const loadZones = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await repository.getAllZones();
+      const options = data.map((zone) => ({
+        value: zone.id,
+        label: zone.name
+      }));
+      setZoneOptions(options);
+    } catch (error) {
+      console.error('Failed to load zones:', error);
+      setZoneOptions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [repository]);
 
   // ============== EFFECTS & INITIALIZATION ==============
 
@@ -85,18 +118,16 @@ export const usePatrolController = (repository) => {
    */
   useEffect(() => {
     loadZones();
-  }, []);
+  }, [loadZones]);
 
   /**
-   * Cleanup geolocation watch on component unmount
+   * Cleanup patrol GPS watch on unmount (`stopPatrolTracking` clears the singleton watch in patrol geolocationService).
    */
   useEffect(() => {
     return () => {
-      if (watchId) {
-        navigator.geolocation.clearWatch(watchId);
-      }
+      stopPatrolTracking();
     };
-  }, [watchId]);
+  }, []);
 
   /**
    * Debug effect: Log when all prerequisites for checkpoint checking are met
@@ -118,27 +149,19 @@ export const usePatrolController = (repository) => {
     console.log('checkpointLogsRef updated:', checkpointLogs.length);
   }, [checkpointLogs]);
 
-  // ============== DATA LOADING ==============
-
   /**
-   * Fetch all available zones from the repository
-   * Transforms data for dropdown compatibility
+   * Haversine distance (meters) for checkpoint proximity + route spacing; delegates math to patrol geolocationService
+   * and updates `distanceCalc` for UI parity with the previous implementation.
    */
-  const loadZones = async () => {
-    try {
-      setLoading(true);
-      const data = await repository.getAllZones();
-      const options = data.map((zone) => ({
-        value: zone.id,
-        label: zone.name
-      }));
-      setZoneOptions(options);
-    } catch (error) {
-      console.error('Failed to load zones:', error);
-    } finally {
-      setLoading(false);
+  const calculateDistance = useCallback((lat1, lon1, lat2, lon2) => {
+    const d = haversineDistanceMeters(lat1, lon1, lat2, lon2);
+    if (Number.isFinite(d)) {
+      setDistanceCalc(d);
+      return d;
     }
-  };
+    setDistanceCalc(undefined);
+    return Infinity;
+  }, []);
 
   // ============== FORM HANDLING ==============
 
@@ -200,10 +223,10 @@ export const usePatrolController = (repository) => {
 
   /**
    * Main function to start a new patrol
-   * 1. Creates patrol log
+   * 1. Creates **`patrol_sessions`** row (UUID); same id is **`patrolId`** for PWA `saveLocationLog` / `POST /pwa/sync`.
    * 2. Fetches checkpoints for selected zone
-   * 3. Creates initial checkpoint logs
-   * 4. Starts geolocation tracking
+   * 3. Creates Laravel **`checkpoint_events`** placeholders (`pending`)
+   * 4. Starts geolocation tracking (unchanged architecture)
    */
   const handleStartPatrol = async () => {
     // Validate zone selection
@@ -214,34 +237,35 @@ export const usePatrolController = (repository) => {
 
     try {
       setPatrolLoading(true);
+      lastPostedRouteCoordsRef.current = null;
 
-      // 1. Create patrol log with current timestamp
+      // 1. Create patrol session (canonical id for GPS IndexedDB + `/api/pwa/sync`)
       const now = new Date().toISOString();
       const patrolData = {
         guard_id: formData.guard_id,
         zone_id: formData.zone_id,
         time_start: now,
-        time_end: now, // Will be updated when patrol completes
+        time_end: now,
         status: 'in_progress',
         completion_percentage: 0
       };
 
       const newPatrol = await repository.createPatrol(patrolData);
-      console.log('1. New patrol created:', newPatrol);
+      console.log('1. New patrol session created:', newPatrol);
+      activePatrolSessionIdRef.current = newPatrol?.data?.id ?? null;
       setPatrols(newPatrol);
 
-      // 2. Fetch checkpoints for the selected zone
+      // 2. Fetch checkpoints for the selected zone (repository + patrolService return a plain array)
       const checkpointList = await repository.getAllCheckpointsByZoneId(formData.zone_id);
       setCheckpoints(checkpointList);
-      console.log('2. Checkpoints retrieved:', checkpointList);
+      console.log('2. Checkpoints retrieved:', checkpointList.length, 'items');
 
       alert(`Patrol started successfully! Found ${checkpointList.length} checkpoints.`);
 
       // 3. Create initial checkpoint logs (unvisited state)
       const simplifiedCheckpoints = checkpointList.map((checkpoint) => ({
-        guard_id: newPatrol.data.guard_id,
-        checkpoint_id: checkpoint.id,
-        patrol_log_id: newPatrol.data.id
+        patrol_session_id: newPatrol.data.id,
+        checkpoint_id: checkpoint.id
       }));
 
       const cpLogs = await repository.createBatchCheckpointLogs(simplifiedCheckpoints);
@@ -257,11 +281,16 @@ export const usePatrolController = (repository) => {
 
       // 4. Update UI state and start tracking
       setCpNumber(checkpointList.length);
-      startGeolocationTracking();
+
+      const patrolSessionId = newPatrol.data.id;
+      const guardUserId = newPatrol.data.guard_id ?? formData.guard_id ?? currentUser?.id;
+      await startGeolocationTracking(patrolSessionId, guardUserId);
 
       // Debug logging
       console.log('First checkpoint log structure:', JSON.stringify(logsData[0], null, 2));
-      console.log('Checkpoint data:', JSON.stringify(checkpointList[0], null, 2));
+      if (checkpointList.length > 0) {
+        console.log('Checkpoint data:', JSON.stringify(checkpointList[0], null, 2));
+      }
     } catch (error) {
       console.error('Failed to start patrol:', error);
       alert('Failed to start patrol. Please try again.');
@@ -273,34 +302,60 @@ export const usePatrolController = (repository) => {
   // ============== GEOLOCATION MANAGEMENT ==============
 
   /**
-   * Starts continuous geolocation tracking
-   * Uses high accuracy mode for better geofence detection
+   * Starts patrol GPS via domain geolocation service (single watch / IndexedDB persistence — no direct `navigator.geolocation` here).
+   * 1) `capturePatrolLocationSnapshot` — one-shot fix + `saveLocationLog` (PWA layer).
+   * 2) `startPatrolTracking` — continuous watch with the same persistence path.
    */
-  const startGeolocationTracking = () => {
-    if (!navigator.geolocation) {
-      console.error('Geolocation is not supported by your browser');
+  /** @param {string} patrolSessionId `patrol_sessions.id` — persisted as `patrolId` for PWA location logs */
+  const startGeolocationTracking = async (patrolSessionId, guardUserId) => {
+    const patrolId = patrolSessionId;
+    const userId = guardUserId;
+
+    if (!patrolId || userId == null || userId === '') {
+      console.error('Cannot start patrol tracking without patrol session id and guard id');
       return;
     }
 
-    const options = {
-      enableHighAccuracy: true, // Use GPS if available
-      timeout: 10000, // Maximum wait time for position
-      maximumAge: 0 // Don't use cached positions
-    };
+    try {
+      console.log('[patrol-debug] before capturePatrolLocationSnapshot', { patrolId, userId });
+      const { position: firstPosition, record: firstSavedRecord } = await capturePatrolLocationSnapshot({
+        patrolId,
+        userId,
+        source: LOCATION_SOURCE.LIVE
+      });
+      console.log('[patrol-debug] after capturePatrolLocationSnapshot success', {
+        lat: firstPosition.coords.latitude,
+        lng: firstPosition.coords.longitude,
+        savedRecord: firstSavedRecord
+      });
 
-    // Start watching position with combined callbacks
-    const id = navigator.geolocation.watchPosition(
-      (position) => {
-        handlePositionUpdate(position);
-        checkNearbyCheckpoints(position);
-        recordPatrolRoute(position); // NEW: Record route point
-      },
-      handleGeolocationError,
-      options
-    );
+      handlePositionUpdate(firstPosition);
+      checkNearbyCheckpoints(firstPosition);
 
-    setWatchId(id);
-    console.log('Geolocation tracking started');
+      console.log('[patrol-debug] before recordPatrolRoute (first snapshot)');
+      await recordPatrolRoute(firstPosition);
+
+      console.log('[patrol-debug] before startPatrolTracking (watch)');
+      await startPatrolTracking({
+        patrolId,
+        userId,
+        skipInitialPersistAndFetch: true,
+        onLocationSaved: (record) => {
+          console.log('[patrol-debug] onLocationSaved (watch)', record);
+        },
+        onPosition: (position) => {
+          handlePositionUpdate(position);
+          checkNearbyCheckpoints(position);
+          recordPatrolRoute(position);
+        },
+        onError: handleGeolocationError
+      });
+
+      console.log('[patrol-debug] after startPatrolTracking — watch active');
+      console.log('Patrol geolocation tracking started (patrol/services/geolocationService)');
+    } catch (error) {
+      handleGeolocationError(error);
+    }
   };
 
   /**
@@ -328,51 +383,63 @@ export const usePatrolController = (repository) => {
     const { latitude, longitude, altitude, accuracy } = position.coords;
     const timestamp = position.timestamp;
 
-    // Check if we have an active patrol
-    if (!patrols?.data?.id) {
-      console.log('No active patrol, skipping route recording');
+    const patrolSessionId = activePatrolSessionIdRef.current ?? patrols?.data?.id;
+    if (!patrolSessionId) {
+      console.log('[patrol-debug] recordPatrolRoute: no patrol session id (ref/state), skipping POST /patrol-routes');
       return;
     }
 
-    // Check if this is the first point or far enough from the last point
-    const lastRoute = patrolRoutes[patrolRoutes.length - 1];
+    const lastPosted = lastPostedRouteCoordsRef.current;
     let shouldRecord = true;
+    let spacingM = 0;
 
-    if (lastRoute) {
-      const distance = calculateDistance(latitude, longitude, lastRoute.latitude, lastRoute.longitude);
-      shouldRecord = distance >= MIN_ROUTE_DISTANCE;
+    if (lastPosted) {
+      spacingM = haversineDistanceMeters(latitude, longitude, lastPosted.latitude, lastPosted.longitude);
+      shouldRecord = Number.isFinite(spacingM) ? spacingM >= MIN_ROUTE_DISTANCE : true;
     }
 
     if (!shouldRecord) {
-      console.log(`Skipping route point - too close (${distanceCalc?.toFixed(2)}m < ${MIN_ROUTE_DISTANCE}m)`);
+      console.log(`[patrol-debug] Skipping route point — spacing ${spacingM.toFixed(2)}m < ${MIN_ROUTE_DISTANCE}m`);
       return;
     }
 
+    console.log('[patrol-debug] recordPatrolRoute: before createPatrolRoute API', {
+      patrolSessionId,
+      lat: latitude,
+      lng: longitude,
+      firstSampleOfSession: !lastPosted
+    });
+
     try {
-      // Prepare route data
       const routeData = {
-        patrol_log_id: patrols.data.id,
+        patrol_session_id: patrolSessionId,
+        patrol_log_id: patrolSessionId,
         guard_id: formData.guard_id || currentUser?.id,
         latitude,
         longitude,
-        altitude: altitude || null
+        altitude: altitude || null,
+        accuracy: Number.isFinite(accuracy) ? accuracy : null,
+        timestamp
       };
 
-      console.log('Recording patrol route point:', routeData);
-
-      // Send to backend
       const response = await repository.createPatrolRoute(routeData);
+      console.log('[patrol-debug] createPatrolRoute response:', response);
 
       if (response.success) {
-        // Update local state
+        lastPostedRouteCoordsRef.current = { latitude, longitude };
+
         const newRoutePoint = {
           ...response.data,
           timestamp: new Date(timestamp).toISOString(),
           accuracy
         };
 
-        setPatrolRoutes((prev) => [...prev, newRoutePoint]);
-        console.log(`📍 Route point recorded: #${patrolRoutes.length + 1}`);
+        setPatrolRoutes((prev) => {
+          const next = [...prev, newRoutePoint];
+          console.log('[patrol-debug] Route point stored in state after POST', { count: next.length });
+          console.log(`📍 Route point recorded: #${next.length}`);
+          return next;
+        });
       }
     } catch (error) {
       console.error('Failed to record patrol route:', error);
@@ -381,55 +448,27 @@ export const usePatrolController = (repository) => {
   };
 
   /**
-   * Handles geolocation errors
-   * @param {GeolocationPositionError} error - Geolocation error object
+   * Handles geolocation errors from patrol geolocationService (normalized `{ code, message }` or browser `PositionError`).
    */
   const handleGeolocationError = (error) => {
-    console.error(`Geolocation error (${error.code}): ${error.message}`);
+    const code = error?.code ?? 'unknown';
+    const message = error?.message ?? String(error);
+    console.error('[patrol-debug] geolocation error handler:', { code, message, error });
+    console.error(`Geolocation error (${code}): ${message}`);
   };
 
   /**
-   * Stops geolocation tracking
+   * Stops patrol GPS watch via patrol geolocationService (singleton — single source of truth for the watch).
    */
   const stopGeolocationTracking = () => {
-    if (watchId) {
-      navigator.geolocation.clearWatch(watchId);
-      setWatchId(null);
-      console.log('Geolocation tracking stopped');
-    }
+    stopPatrolTracking();
+    activePatrolSessionIdRef.current = null;
+    lastPostedRouteCoordsRef.current = null;
+    console.log('Patrol geolocation tracking stopped');
     setCpNumber(0);
   };
 
   // ============== GEOFENCE & DISTANCE CALCULATIONS ==============
-
-  /**
-   * Haversine formula to calculate distance between two coordinates
-   * @param {number} lat1 - Latitude of point 1
-   * @param {number} lon1 - Longitude of point 1
-   * @param {number} lat2 - Latitude of point 2
-   * @param {number} lon2 - Longitude of point 2
-   * @returns {number} Distance in meters
-   */
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    lat1 = Number(lat1);
-    lon1 = Number(lon1);
-    lat2 = Number(lat2);
-    lon2 = Number(lon2);
-
-    if ([lat1, lon1, lat2, lon2].some(Number.isNaN)) return Infinity;
-
-    const R = 6371e3; // Earth's radius in meters
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    setDistanceCalc(R * c);
-    return R * c;
-  };
 
   /**
    * Checks if current position is near any unvisited checkpoints
@@ -558,7 +597,8 @@ export const usePatrolController = (repository) => {
         latitude,
         longitude,
         accuracy_meters: accuracy,
-        is_within_geofence: true
+        is_within_geofence: true,
+        actual_time: updatedLog.actual_time
       });
       console.log(`✅ Checkpoint "${checkpoint.name}" marked as reached`);
 
@@ -687,6 +727,7 @@ export const usePatrolController = (repository) => {
     // Patrol operations
     handleStartPatrol,
     completePatrol,
+    updateCheckpointLog,
 
     // Geolocation control
     stopGeolocationTracking,
