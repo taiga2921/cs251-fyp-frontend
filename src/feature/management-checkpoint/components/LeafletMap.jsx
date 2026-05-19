@@ -1,35 +1,42 @@
-// components/LeafletMap.js
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { Alert, Box } from '@mui/material';
 
-const LeafletMap = ({ checkpoint }) => {
-  const mapContainer = useRef(null);
+/** Read-only checkpoint map with radius circle (view page). */
+export default function LeafletMap({ checkpoint }) {
+  const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const markerRef = useRef(null);
+
+  const lat = Number(checkpoint?.latitude);
+  const lng = Number(checkpoint?.longitude);
+  const radius = Number(checkpoint?.radius) > 0 ? Number(checkpoint.radius) : 20;
 
   useEffect(() => {
-    // Check if Leaflet is loaded
-    if (!window.L) {
-      console.error('Leaflet not loaded. Check CDN scripts.');
-      return;
+    if (!window.L || !mapContainerRef.current || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return undefined;
     }
 
-    // Initialize map only once
-    if (!mapRef.current && mapContainer.current) {
-      // Create map instance
-      mapRef.current = window.L.map(mapContainer.current).setView([`${checkpoint.latitude}`, `${checkpoint.longitude}`], 18);
+    const L = window.L;
 
-      // Add tile layer
-      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    if (!mapRef.current) {
+      mapRef.current = L.map(mapContainerRef.current).setView([lat, lng], 17);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       }).addTo(mapRef.current);
 
-      // Add marker
-      markerRef.current = window.L.marker([`${checkpoint.latitude}`, `${checkpoint.longitude}`]).addTo(mapRef.current);
-      // .bindPopup('A pretty CSS3 popup.<br> Easily customizable.')
-      // .openPopup();
+      L.marker([lat, lng]).addTo(mapRef.current);
+      L.circle([lat, lng], {
+        radius,
+        color: '#1976d2',
+        fillColor: '#1976d2',
+        fillOpacity: 0.15,
+        weight: 2
+      }).addTo(mapRef.current);
     }
 
-    // Cleanup function
+    return undefined;
+  }, [lat, lng, radius]);
+
+  useEffect(() => {
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
@@ -38,7 +45,13 @@ const LeafletMap = ({ checkpoint }) => {
     };
   }, []);
 
-  return <div ref={mapContainer} style={{ height: '500px', width: '100%' }} />;
-};
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return <Alert severity="info">No valid coordinates to display on the map.</Alert>;
+  }
 
-export default LeafletMap;
+  if (!window.L) {
+    return <Alert severity="warning">Map library is not loaded.</Alert>;
+  }
+
+  return <Box ref={mapContainerRef} sx={{ height: 400, width: '100%', borderRadius: 2, overflow: 'hidden' }} />;
+}

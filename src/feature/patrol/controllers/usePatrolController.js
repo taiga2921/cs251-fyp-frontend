@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LOCATION_SOURCE } from 'pwa/locationLogService';
+import { db } from 'pwa/db';
+import {
+  flushSyncQueue,
+  SYNC_QUEUE_STATUS_FAILED,
+  SYNC_QUEUE_STATUS_PENDING,
+  SYNC_RESULT_STATUS_CONFLICT,
+  SYNC_RESULT_STATUS_EXHAUSTED,
+  SYNC_RESULT_STATUS_VALIDATION_FAILED
+} from 'pwa/syncService';
 import { useAuthController } from '../../authentication/controllers/useAuthController';
 import {
   capturePatrolLocationSnapshot,
@@ -64,8 +73,28 @@ export const usePatrolController = (repository) => {
   const activePatrolSessionIdRef = useRef(null);
   /** Last coords POSTed to `/patrol-routes` — avoids stale `patrolRoutes` closure in the GPS watch */
   const lastPostedRouteCoordsRef = useRef(null);
+  /** Guard user id for the active patrol session (resume snapshot when React state is stale) */
+  const activeGuardUserIdRef = useRef(null);
+  /** Debounce rapid visibility/focus resume captures */
+  const lastResumeCaptureAtRef = useRef(0);
+  /** Latest geofence/route helpers for resume handler (avoids stale useCallback closures) */
+  const checkNearbyCheckpointsRef = useRef(() => {});
+  const recordPatrolRouteRef = useRef(async () => {});
 
   const [patrols, setPatrols] = useState([]);
+
+  /** Gap-aware summary from `GET /patrol-sessions/{id}/summary` (after patrol stop) */
+  const [patrolSummary, setPatrolSummary] = useState(null);
+  const [patrolSummaryLoading, setPatrolSummaryLoading] = useState(false);
+  const [patrolSummaryError, setPatrolSummaryError] = useState(null);
+  const [summaryMayBeIncomplete, setSummaryMayBeIncomplete] = useState(false);
+
+  /** Stop-patrol finalization: sync → validate → summary */
+  const [validatingPatrol, setValidatingPatrol] = useState(false);
+  const [validationError, setValidationError] = useState(null);
+  const [validationResult, setValidationResult] = useState(null);
+  const [validationWarning, setValidationWarning] = useState(null);
+  const [finalizingStep, setFinalizingStep] = useState('idle');
 
   // ============== CONSTANTS ==============
 
@@ -77,6 +106,18 @@ export const usePatrolController = (repository) => {
 
   /** Minimum distance between route points (in meters) to avoid too many points */
   const MIN_ROUTE_DISTANCE = 5;
+
+  /** Cooldown between resume-based GPS snapshots (visibility/focus) */
+  const RESUME_CAPTURE_COOLDOWN_MS = 5000;
+
+  const FINALIZING_STEP = {
+    IDLE: 'idle',
+    SYNCING: 'syncing',
+    VALIDATING: 'validating',
+    LOADING_SUMMARY: 'loading_summary',
+    COMPLETED: 'completed',
+    FAILED: 'failed'
+  };
 
   // ============== DATA LOADING ==============
 
@@ -129,24 +170,13 @@ export const usePatrolController = (repository) => {
     };
   }, []);
 
-  /**
-   * Debug effect: Log when all prerequisites for checkpoint checking are met
-   */
-  useEffect(() => {
-    if (currentPosition && checkpoints.length > 0 && checkpointLogs.length > 0) {
-      console.log('All systems ready: Checking checkpoints with new position');
-    }
-  }, [currentPosition, checkpoints, checkpointLogs]);
-
   // Update refs when state changes
   useEffect(() => {
     checkpointsRef.current = checkpoints;
-    console.log('checkpointsRef updated:', checkpoints.length);
   }, [checkpoints]);
 
   useEffect(() => {
     checkpointLogsRef.current = checkpointLogs;
-    console.log('checkpointLogsRef updated:', checkpointLogs.length);
   }, [checkpointLogs]);
 
   /**
@@ -238,6 +268,15 @@ export const usePatrolController = (repository) => {
     try {
       setPatrolLoading(true);
       lastPostedRouteCoordsRef.current = null;
+      setPatrolSummary(null);
+      setPatrolSummaryError(null);
+      setPatrolSummaryLoading(false);
+      setSummaryMayBeIncomplete(false);
+      setValidatingPatrol(false);
+      setValidationError(null);
+      setValidationResult(null);
+      setValidationWarning(null);
+      setFinalizingStep(FINALIZING_STEP.IDLE);
 
       // 1. Create patrol session (canonical id for GPS IndexedDB + `/api/pwa/sync`)
       const now = new Date().toISOString();
@@ -251,14 +290,12 @@ export const usePatrolController = (repository) => {
       };
 
       const newPatrol = await repository.createPatrol(patrolData);
-      console.log('1. New patrol session created:', newPatrol);
       activePatrolSessionIdRef.current = newPatrol?.data?.id ?? null;
       setPatrols(newPatrol);
 
       // 2. Fetch checkpoints for the selected zone (repository + patrolService return a plain array)
       const checkpointList = await repository.getAllCheckpointsByZoneId(formData.zone_id);
       setCheckpoints(checkpointList);
-      console.log('2. Checkpoints retrieved:', checkpointList.length, 'items');
 
       alert(`Patrol started successfully! Found ${checkpointList.length} checkpoints.`);
 
@@ -269,12 +306,10 @@ export const usePatrolController = (repository) => {
       }));
 
       const cpLogs = await repository.createBatchCheckpointLogs(simplifiedCheckpoints);
-      console.log('3. Checkpoint logs created:', cpLogs);
 
       // Extract actual log data from API responses
       const logsData = cpLogs.map((response) => response.data);
       setCheckpointLogs(logsData);
-      console.log('4. Checkpoint logs initialized:', logsData);
 
       // Initialize empty patrol routes array
       setPatrolRoutes([]);
@@ -284,13 +319,8 @@ export const usePatrolController = (repository) => {
 
       const patrolSessionId = newPatrol.data.id;
       const guardUserId = newPatrol.data.guard_id ?? formData.guard_id ?? currentUser?.id;
+      activeGuardUserIdRef.current = guardUserId ?? null;
       await startGeolocationTracking(patrolSessionId, guardUserId);
-
-      // Debug logging
-      console.log('First checkpoint log structure:', JSON.stringify(logsData[0], null, 2));
-      if (checkpointList.length > 0) {
-        console.log('Checkpoint data:', JSON.stringify(checkpointList[0], null, 2));
-      }
     } catch (error) {
       console.error('Failed to start patrol:', error);
       alert('Failed to start patrol. Please try again.');
@@ -317,32 +347,21 @@ export const usePatrolController = (repository) => {
     }
 
     try {
-      console.log('[patrol-debug] before capturePatrolLocationSnapshot', { patrolId, userId });
-      const { position: firstPosition, record: firstSavedRecord } = await capturePatrolLocationSnapshot({
+      const { position: firstPosition } = await capturePatrolLocationSnapshot({
         patrolId,
         userId,
         source: LOCATION_SOURCE.LIVE
-      });
-      console.log('[patrol-debug] after capturePatrolLocationSnapshot success', {
-        lat: firstPosition.coords.latitude,
-        lng: firstPosition.coords.longitude,
-        savedRecord: firstSavedRecord
       });
 
       handlePositionUpdate(firstPosition);
       checkNearbyCheckpoints(firstPosition);
 
-      console.log('[patrol-debug] before recordPatrolRoute (first snapshot)');
       await recordPatrolRoute(firstPosition);
 
-      console.log('[patrol-debug] before startPatrolTracking (watch)');
       await startPatrolTracking({
         patrolId,
         userId,
         skipInitialPersistAndFetch: true,
-        onLocationSaved: (record) => {
-          console.log('[patrol-debug] onLocationSaved (watch)', record);
-        },
         onPosition: (position) => {
           handlePositionUpdate(position);
           checkNearbyCheckpoints(position);
@@ -350,9 +369,6 @@ export const usePatrolController = (repository) => {
         },
         onError: handleGeolocationError
       });
-
-      console.log('[patrol-debug] after startPatrolTracking — watch active');
-      console.log('Patrol geolocation tracking started (patrol/services/geolocationService)');
     } catch (error) {
       handleGeolocationError(error);
     }
@@ -371,7 +387,6 @@ export const usePatrolController = (repository) => {
     const displayText = `${dateObj.toLocaleString()}\nLat: ${latitude.toFixed(6)}\nLong: ${longitude.toFixed(6)}\nAcc: ${accuracy ? accuracy.toFixed(2) + 'm' : 'N/A'}`;
 
     setLocationDisplay(displayText);
-    console.log(`Position: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}, Accuracy: ${accuracy}m`);
   };
 
   /**
@@ -385,7 +400,6 @@ export const usePatrolController = (repository) => {
 
     const patrolSessionId = activePatrolSessionIdRef.current ?? patrols?.data?.id;
     if (!patrolSessionId) {
-      console.log('[patrol-debug] recordPatrolRoute: no patrol session id (ref/state), skipping POST /patrol-routes');
       return;
     }
 
@@ -399,16 +413,8 @@ export const usePatrolController = (repository) => {
     }
 
     if (!shouldRecord) {
-      console.log(`[patrol-debug] Skipping route point — spacing ${spacingM.toFixed(2)}m < ${MIN_ROUTE_DISTANCE}m`);
       return;
     }
-
-    console.log('[patrol-debug] recordPatrolRoute: before createPatrolRoute API', {
-      patrolSessionId,
-      lat: latitude,
-      lng: longitude,
-      firstSampleOfSession: !lastPosted
-    });
 
     try {
       const routeData = {
@@ -423,7 +429,6 @@ export const usePatrolController = (repository) => {
       };
 
       const response = await repository.createPatrolRoute(routeData);
-      console.log('[patrol-debug] createPatrolRoute response:', response);
 
       if (response.success) {
         lastPostedRouteCoordsRef.current = { latitude, longitude };
@@ -434,12 +439,7 @@ export const usePatrolController = (repository) => {
           accuracy
         };
 
-        setPatrolRoutes((prev) => {
-          const next = [...prev, newRoutePoint];
-          console.log('[patrol-debug] Route point stored in state after POST', { count: next.length });
-          console.log(`📍 Route point recorded: #${next.length}`);
-          return next;
-        });
+        setPatrolRoutes((prev) => [...prev, newRoutePoint]);
       }
     } catch (error) {
       console.error('Failed to record patrol route:', error);
@@ -453,19 +453,22 @@ export const usePatrolController = (repository) => {
   const handleGeolocationError = (error) => {
     const code = error?.code ?? 'unknown';
     const message = error?.message ?? String(error);
-    console.error('[patrol-debug] geolocation error handler:', { code, message, error });
-    console.error(`Geolocation error (${code}): ${message}`);
+    console.error(`Geolocation error (${code}): ${message}`, error);
   };
 
   /**
    * Stops patrol GPS watch via patrol geolocationService (singleton — single source of truth for the watch).
+   * @param {{ resetCheckpointUi?: boolean }} [options] — defer `cpNumber` reset during stop-patrol finalization UX
    */
-  const stopGeolocationTracking = () => {
+  const stopGeolocationTracking = ({ resetCheckpointUi = true } = {}) => {
     stopPatrolTracking();
     activePatrolSessionIdRef.current = null;
+    activeGuardUserIdRef.current = null;
     lastPostedRouteCoordsRef.current = null;
-    console.log('Patrol geolocation tracking stopped');
-    setCpNumber(0);
+    lastResumeCaptureAtRef.current = 0;
+    if (resetCheckpointUi) {
+      setCpNumber(0);
+    }
   };
 
   // ============== GEOFENCE & DISTANCE CALCULATIONS ==============
@@ -474,8 +477,10 @@ export const usePatrolController = (repository) => {
    * Checks if current position is near any unvisited checkpoints
    * Updates checkpoint logs when guard enters geofence
    * @param {GeolocationPosition} position - Current GPS position
+   * @param {{ detectionContext?: 'continuous' | 'resume' }} [options]
    */
-  const checkNearbyCheckpoints = (position) => {
+  const checkNearbyCheckpoints = (position, options = {}) => {
+    const detectionContext = options.detectionContext ?? 'continuous';
     const { latitude, longitude, accuracy } = position.coords;
 
     // Store position for other components
@@ -485,23 +490,14 @@ export const usePatrolController = (repository) => {
     const currentCheckpoints = checkpointsRef.current;
     const currentCheckpointLogs = checkpointLogsRef.current;
 
-    console.log('=== Checking checkpoints ===');
-    console.log('Checkpoints available:', currentCheckpoints?.length || 0);
-    console.log('Checkpoint logs available:', currentCheckpointLogs?.length || 0);
-    console.log('Current position:', { lat: latitude, lng: longitude });
-
     // Validate prerequisites using ref values
     if (!currentCheckpoints || currentCheckpoints.length === 0) {
-      console.log('No checkpoints available for checking');
       return;
     }
 
     if (!currentCheckpointLogs || currentCheckpointLogs.length === 0) {
-      console.log('No checkpoint logs available yet');
       return;
     }
-
-    console.log(`Checking ${currentCheckpoints.length} checkpoints...`);
 
     // Check each checkpoint using ref values
     currentCheckpoints.forEach(async (checkpoint) => {
@@ -517,16 +513,14 @@ export const usePatrolController = (repository) => {
         const distance = calculateDistance(latitude, longitude, checkpointLat, checkpointLon);
         const isWithinGeofence = distance <= DEFAULT_GEOFENCE_RADIUS + (accuracy || ACCURACY_BUFFER);
 
-        console.log(`Checkpoint "${checkpoint.name}": ${distance.toFixed(2)}m away`);
-
         if (isWithinGeofence) {
           // Find log using ref value
           const logIndex = currentCheckpointLogs.findIndex((log) => log.checkpoint_id === checkpoint.id);
 
-          console.log(`Found logIndex ${logIndex} for checkpoint "${checkpoint.name}"`);
-
-          if (logIndex !== -1 && !currentCheckpointLogs[logIndex].is_within_geofence) {
-            await markCheckpointAsReached(checkpoint, position, logIndex);
+          const log = logIndex !== -1 ? currentCheckpointLogs[logIndex] : null;
+          const alreadyVerified = log?.is_within_geofence === true || log?.status === 'verified';
+          if (logIndex !== -1 && !alreadyVerified) {
+            await markCheckpointAsReached(checkpoint, position, logIndex, { detectionContext });
           }
         }
       } catch (error) {
@@ -535,17 +529,20 @@ export const usePatrolController = (repository) => {
     });
   };
 
+  checkNearbyCheckpointsRef.current = checkNearbyCheckpoints;
+  recordPatrolRouteRef.current = recordPatrolRoute;
+
   /**
    * Marks a checkpoint as reached and updates records
    * @param {Object} checkpoint - Checkpoint object
    * @param {GeolocationPosition} position - Current GPS position
    * @param {number} logIndex - Index of the log in checkpointLogsRef
+   * @param {{ detectionContext?: 'continuous' | 'resume' }} [options]
    */
-  const markCheckpointAsReached = async (checkpoint, position, logIndex) => {
+  const markCheckpointAsReached = async (checkpoint, position, logIndex, options = {}) => {
+    const detectionContext = options.detectionContext ?? 'continuous';
     const { latitude, longitude, accuracy } = position.coords;
     const currentCheckpointLogs = checkpointLogsRef.current;
-
-    console.log('markCheckpointAsReached called for:', checkpoint.name, 'logIndex:', logIndex);
 
     // Check if logIndex is valid
     if (logIndex === -1 || logIndex >= currentCheckpointLogs.length) {
@@ -555,9 +552,8 @@ export const usePatrolController = (repository) => {
 
     const log = currentCheckpointLogs[logIndex];
 
-    // Skip if already marked as reached
-    if (log.is_within_geofence) {
-      console.log(`Checkpoint "${checkpoint.name}" already marked as reached`);
+    // Skip if already marked as reached (local or server-verified)
+    if (log.is_within_geofence || log.status === 'verified') {
       return;
     }
 
@@ -580,8 +576,6 @@ export const usePatrolController = (repository) => {
     const newTotalCount = updatedLogs.length;
     const newProgress = newTotalCount > 0 ? (newCompletedCount / newTotalCount) * 100 : 0;
 
-    console.log(`Progress update: ${newCompletedCount}/${newTotalCount} = ${newProgress}%`);
-
     // Determine if patrol is completed (all checkpoints visited)
     const isPatrolCompleted = newProgress === 100;
 
@@ -593,14 +587,22 @@ export const usePatrolController = (repository) => {
 
     // Update backend - checkpoint log first
     try {
-      await repository.updateCheckpointLog(updatedLog.id, {
+      const patchPayload = {
         latitude,
         longitude,
         accuracy_meters: accuracy,
         is_within_geofence: true,
         actual_time: updatedLog.actual_time
-      });
-      console.log(`✅ Checkpoint "${checkpoint.name}" marked as reached`);
+      };
+
+      if (detectionContext === 'resume') {
+        const poorAccuracy = !Number.isFinite(accuracy) || accuracy > DEFAULT_GEOFENCE_RADIUS;
+        patchPayload.status = poorAccuracy ? 'uncertain' : 'verified';
+        patchPayload.detection_type = 'resume';
+        patchPayload.confidence_score = 65;
+      }
+
+      await repository.updateCheckpointLog(updatedLog.id, patchPayload);
 
       // Prepare patrol update data
       const patrolUpdateData = {
@@ -611,18 +613,74 @@ export const usePatrolController = (repository) => {
       if (isPatrolCompleted) {
         patrolUpdateData.status = 'completed';
         patrolUpdateData.time_end = new Date().toISOString(); // Set actual end time
-        console.log('🎉 Patrol completed! All checkpoints visited.');
       }
 
       // Update patrol
       if (patrols?.data?.id) {
         await repository.updatePatrol(patrols.data.id, patrolUpdateData);
-        console.log(`📊 Patrol updated: ${newProgress}% complete${isPatrolCompleted ? ' (COMPLETED)' : ''}`);
       }
     } catch (error) {
       console.error(`Failed to update checkpoint "${checkpoint.name}":`, error);
     }
   };
+
+  /**
+   * PWA resume: one-shot GPS when the tab regains visibility or window focus (does not start/stop the watch).
+   */
+  const handlePatrolResume = useCallback(async () => {
+    const patrolSessionId = activePatrolSessionIdRef.current;
+    if (!patrolSessionId) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastResumeCaptureAtRef.current < RESUME_CAPTURE_COOLDOWN_MS) {
+      return;
+    }
+    lastResumeCaptureAtRef.current = now;
+
+    const userId = activeGuardUserIdRef.current ?? formData.guard_id ?? currentUser?.id;
+    if (userId == null || userId === '') {
+      return;
+    }
+
+    try {
+      const { position } = await capturePatrolLocationSnapshot({
+        patrolId: patrolSessionId,
+        userId,
+        source: LOCATION_SOURCE.RESUME
+      });
+
+      handlePositionUpdate(position);
+      checkNearbyCheckpointsRef.current(position, { detectionContext: 'resume' });
+      await recordPatrolRouteRef.current(position);
+    } catch (error) {
+      handleGeolocationError(error);
+    }
+  }, [formData.guard_id, currentUser?.id]);
+
+  /**
+   * Re-check checkpoints after app resume (background tab / screen off gap).
+   */
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handlePatrolResume();
+      }
+    };
+
+    const onWindowFocus = () => {
+      handlePatrolResume();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onWindowFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onWindowFocus);
+    };
+  }, [handlePatrolResume]);
 
   /**
    * Updates a specific checkpoint log
@@ -653,31 +711,168 @@ export const usePatrolController = (repository) => {
     }
   };
 
+  const extractApiErrorMessage = useCallback((error) => {
+    const data = error?.data;
+    if (typeof data === 'string' && data.trim()) {
+      return data;
+    }
+    if (data?.message) {
+      return data.message;
+    }
+    if (data?.data?.message) {
+      return data.data.message;
+    }
+    if (error?.message) {
+      return error.message;
+    }
+    return 'An unexpected error occurred';
+  }, []);
+
+  const inspectSyncQueue = useCallback(async () => {
+    const [pendingCount, failedRows] = await Promise.all([
+      db.sync_queue.where('status').equals(SYNC_QUEUE_STATUS_PENDING).count(),
+      db.sync_queue.where('status').equals(SYNC_QUEUE_STATUS_FAILED).toArray()
+    ]);
+
+    const validationFailedCount = failedRows.filter(
+      (row) => row.resultStatus === SYNC_RESULT_STATUS_VALIDATION_FAILED
+    ).length;
+    const conflictCount = failedRows.filter((row) => row.resultStatus === SYNC_RESULT_STATUS_CONFLICT).length;
+    const exhaustedCount = failedRows.filter((row) => row.resultStatus === SYNC_RESULT_STATUS_EXHAUSTED).length;
+
+    return {
+      pendingCount,
+      failedCount: failedRows.length,
+      validationFailedCount,
+      conflictCount,
+      exhaustedCount,
+      hasProblems: pendingCount > 0 || failedRows.length > 0
+    };
+  }, []);
+
+  const fetchPatrolSummary = useCallback(
+    async (patrolSessionId) => {
+      if (!patrolSessionId) {
+        return;
+      }
+
+      setPatrolSummaryLoading(true);
+      setPatrolSummaryError(null);
+
+      try {
+        const envelope = await repository.getPatrolSummary(patrolSessionId);
+        if (envelope?.success === false) {
+          throw new Error(envelope?.message || 'Failed to load patrol summary');
+        }
+        setPatrolSummary(envelope?.data ?? null);
+      } catch (error) {
+        const message = error?.response?.data?.message ?? error?.message ?? 'Failed to load patrol summary';
+        setPatrolSummary(null);
+        setPatrolSummaryError(message);
+        console.error('Failed to fetch patrol summary:', error);
+      } finally {
+        setPatrolSummaryLoading(false);
+      }
+    },
+    [repository]
+  );
+
   /**
-   * Manually complete the patrol
+   * Stop patrol: GPS off → session update → PWA sync → backend validate → summary.
    */
   const completePatrol = async () => {
-    if (!patrols?.data?.id) {
+    if (validatingPatrol || finalizingStep !== FINALIZING_STEP.IDLE) {
+      return;
+    }
+
+    const patrolSessionId = patrols?.data?.id ?? activePatrolSessionIdRef.current;
+    if (!patrolSessionId) {
       console.error('No active patrol to complete');
       alert('No active patrol found');
       return;
     }
 
+    const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
+
     try {
-      await repository.updatePatrol(patrols.data.id, {
+      setPatrolLoading(true);
+      setValidationError(null);
+      setValidationResult(null);
+      setValidationWarning(null);
+      setPatrolSummaryError(null);
+
+      stopGeolocationTracking({ resetCheckpointUi: false });
+
+      await repository.updatePatrol(patrolSessionId, {
         status: 'completed',
         time_end: new Date().toISOString(),
         completion_percentage: progress
       });
 
-      // Stop geolocation tracking
-      stopGeolocationTracking();
+      setFinalizingStep(FINALIZING_STEP.SYNCING);
 
+      let mayBeIncomplete = !isOnline;
+
+      if (isOnline) {
+        try {
+          await flushSyncQueue();
+        } catch (syncError) {
+          console.warn('[patrol] flushSyncQueue before validation failed', syncError);
+          mayBeIncomplete = true;
+          setValidationWarning((prev) =>
+            prev ?? 'Sync flush failed. Backend validation may be incomplete.'
+          );
+        }
+
+        const queueState = await inspectSyncQueue();
+        if (queueState.hasProblems) {
+          mayBeIncomplete = true;
+          setValidationWarning((prev) =>
+            prev ?? 'Some logs could not be synced. Backend validation may be incomplete.'
+          );
+        }
+      } else {
+        setValidationWarning('Patrol saved locally. Validation will be available after sync.');
+      }
+
+      setSummaryMayBeIncomplete(mayBeIncomplete);
+
+      if (isOnline) {
+        setFinalizingStep(FINALIZING_STEP.VALIDATING);
+        setValidatingPatrol(true);
+        try {
+          const envelope = await repository.validatePatrolSession(patrolSessionId);
+          if (envelope?.success === false) {
+            throw new Error(envelope?.message || 'Patrol validation failed');
+          }
+          setValidationResult(envelope?.data ?? null);
+        } catch (validationErr) {
+          const message = extractApiErrorMessage(validationErr);
+          setValidationError(message);
+          setValidationWarning(
+            (prev) =>
+              prev ??
+              'Validation failed. Summary may reflect provisional checkpoint data only.'
+          );
+          console.error('[patrol] backend validation failed', validationErr);
+        } finally {
+          setValidatingPatrol(false);
+        }
+      }
+
+      setFinalizingStep(FINALIZING_STEP.LOADING_SUMMARY);
+      await fetchPatrolSummary(patrolSessionId);
+
+      setFinalizingStep(FINALIZING_STEP.COMPLETED);
       alert('Patrol completed successfully!');
-      console.log('Patrol marked as completed manually');
     } catch (error) {
       console.error('Failed to complete patrol:', error);
-      alert('Failed to complete patrol');
+      setFinalizingStep(FINALIZING_STEP.FAILED);
+      alert(extractApiErrorMessage(error) || 'Failed to complete patrol');
+    } finally {
+      setPatrolLoading(false);
+      setValidatingPatrol(false);
+      setCpNumber(0);
     }
   };
 
@@ -715,6 +910,18 @@ export const usePatrolController = (repository) => {
     currentPosition,
     distanceCalc,
     patrols,
+    patrolSummary,
+    patrolSummaryLoading,
+    patrolSummaryError,
+    summaryMayBeIncomplete,
+    validatingPatrol,
+    validationError,
+    validationResult,
+    validationWarning,
+    finalizingStep,
+    isFinalizingPatrol:
+      validatingPatrol ||
+      (finalizingStep !== FINALIZING_STEP.IDLE && finalizingStep !== FINALIZING_STEP.COMPLETED),
 
     // Form handlers
     handleChange,

@@ -1,6 +1,8 @@
-import { CheckpointTable } from './table/CheckpointTable';
-import { CheckpointTableToolbar } from './table/CheckpointTableToolbar';
-import { ZoneProfileData } from './view/ZoneProfileData';
-import { CheckpointProfileData } from './view/CheckpointProfileData';
-
-export { CheckpointTable, CheckpointTableToolbar, ZoneProfileData, CheckpointProfileData };
+export { CheckpointTable } from './table/CheckpointTable';
+export { CheckpointTableToolbar } from './table/CheckpointTableToolbar';
+export { ZoneProfileData } from './view/ZoneProfileData';
+export { CheckpointProfileData } from './view/CheckpointProfileData';
+export { default as CheckpointForm } from './CheckpointForm';
+export { default as CheckpointMapPicker } from './CheckpointMapPicker';
+export { default as CheckpointStatusChip } from './CheckpointStatusChip';
+export { default as CheckpointLocationTypeChip } from './CheckpointLocationTypeChip';

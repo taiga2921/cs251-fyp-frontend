@@ -1,54 +1,57 @@
-import { Box, CircularProgress, Typography, useTheme, useMediaQuery } from '@mui/material';
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
+
+import { Alert, Box, Button, CircularProgress, Stack, useMediaQuery, useTheme } from '@mui/material';
+import { IconMapPin as PinIcon, IconPencil as EditIcon } from '@tabler/icons-react';
+
 import DetailCard from 'ui-component/cards/DetailCard';
-import LeafletMap from '../components/LeafletMap';
+import { SectionHeader } from 'ui-component/SectionHeader';
 
 import { CheckpointRepository } from '../repositories/checkpointRepository';
 import checkpointService from '../datasources/checkpointService';
 import { useCheckpointViewController } from '../controllers/useCheckpointViewController';
-import { CheckpointProfileData } from '../components';
-
-import { IconMapPin as PinIcon } from '@tabler/icons-react';
+import { CheckpointProfileData } from '../components/view/CheckpointProfileData';
+import LeafletMap from '../components/LeafletMap';
 
 export default function CheckpointView() {
-   const { checkpointId } = useParams();
-   const controller = useCheckpointViewController(new CheckpointRepository(checkpointService), checkpointId);
+  const { checkpointId } = useParams();
+  const repository = useMemo(() => new CheckpointRepository(checkpointService), []);
+  const controller = useCheckpointViewController(repository, checkpointId);
 
-   // Responsive design hooks
-   const theme = useTheme();
-   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-   if (controller.loading) {
-      return (
-         <DetailCard title="Checkpoint Details" avatar={<PinIcon size={24} />} onBack={controller.handleBack}>
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-               <CircularProgress size={60} thickness={4} />
-            </Box>
-         </DetailCard>
-      );
-   }
+  if (controller.loading) {
+    return (
+      <DetailCard title="Checkpoint details" avatar={<PinIcon size={24} />} onBack={controller.handleBack}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress size={48} />
+        </Box>
+      </DetailCard>
+    );
+  }
 
-   if (!controller.checkpoint) {
-      return (
-         <DetailCard title="Checkpoint Details" avatar={<PinIcon size={24} />} onBack={controller.handleBack}>
-            <Box sx={{ p: 6, textAlign: 'center' }}>
-               <Typography variant="h3" color="text.secondary">
-                  Checkpoint not found
-               </Typography>
-            </Box>
-         </DetailCard>
-      );
-   }
+  if (!controller.checkpoint) {
+    return (
+      <DetailCard title="Checkpoint details" avatar={<PinIcon size={24} />} onBack={controller.handleBack}>
+        <Alert severity={controller.error ? 'error' : 'info'} sx={{ mt: 2 }}>
+          {controller.error || 'Checkpoint not found.'}
+        </Alert>
+      </DetailCard>
+    );
+  }
 
-   return (
-      <>
-         <DetailCard title="Checkpoint Details" avatar={<PinIcon size={24} />} onBack={controller.handleBack}>
-            {/* Checkpoint Profile Data */}
-            <CheckpointProfileData info={controller.checkpoint.data} isMobile={isMobile}></CheckpointProfileData>
-
-            <br />
-            <LeafletMap checkpoint={controller.checkpoint.data} />
-         </DetailCard>
-      </>
-   );
+  return (
+    <DetailCard title="Checkpoint details" avatar={<PinIcon size={24} />} onBack={controller.handleBack}>
+      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 2 }}>
+        <Button variant="contained" color="secondary" size="small" startIcon={<EditIcon size={18} />} onClick={controller.handleEdit}>
+          Edit checkpoint
+        </Button>
+      </Stack>
+      <CheckpointProfileData checkpoint={controller.checkpoint} isMobile={isMobile} />
+      <br />
+      <SectionHeader title="Map" />
+      <LeafletMap checkpoint={controller.checkpoint} />
+    </DetailCard>
+  );
 }

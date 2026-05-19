@@ -8,7 +8,8 @@ import Box from '@mui/material/Box';
 // project imports
 import NavItem from './NavItem';
 import NavGroup from './NavGroup';
-import menuItems from 'menu-items';
+import getMenuItemsForRole from 'menu-items/getMenuItemsForRole';
+import { getAuthUserRole } from 'utils/auth';
 
 import { useGetMenuMaster } from 'api/menu';
 
@@ -19,6 +20,7 @@ function MenuList() {
   const drawerOpen = Boolean(menuMaster?.isDashboardDrawerOpened);
 
   const [selectedID, setSelectedID] = useState('');
+  const menuItems = getMenuItemsForRole(getAuthUserRole());
 
   const lastItem = null;
 

@@ -55,10 +55,22 @@ const admin = {
           url: '/admin/management-zone'
         },
         {
+          id: 'admin-checkpoint-management',
+          title: 'Checkpoint',
+          type: 'item',
+          url: '/admin/management-checkpoint'
+        },
+        {
           id: 'admin-camera-management',
           title: 'Camera',
           type: 'item',
           url: '/admin/management-camera'
+        },
+        {
+          id: 'admin-patrol-monitoring',
+          title: 'Patrol Monitoring',
+          type: 'item',
+          url: '/admin/patrol-monitoring'
         }
       ]
     }

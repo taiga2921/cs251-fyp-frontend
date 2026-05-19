@@ -9,7 +9,7 @@ export function SubmitButton({ text1, text2, controller }) {
          <Button
             type="submit"
             variant="contained"
-            disabled={controller.loading}
+            disabled={controller.loading || controller.noZones}
             startIcon={controller.loading ? <CircularProgress size={18} /> : <SaveIcon size={18} />}
             sx={{
                borderRadius: 2,

@@ -1,4 +1,4 @@
-import { clearAuthToken, getAuthToken } from 'utils/auth';
+import { clearAuthSession, getAuthToken } from 'utils/auth';
 
 // Base API URL from .env or fallback localhost
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
@@ -44,7 +44,7 @@ const request = async (method, url, data, options = {}) => {
 
   // If unauthorized, clear token and redirect to login
   if (response.status === 401) {
-    clearAuthToken();
+    clearAuthSession();
     redirectToLogin();
     throw new Error('Unauthorized');
   }

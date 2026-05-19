@@ -92,11 +92,8 @@ export function stopPatrolTracking() {
  */
 /** @returns {Promise<{ position: GeolocationPosition, record: Awaited<ReturnType<typeof saveLocationLog>> }>} */
 export async function capturePatrolLocationSnapshot({ patrolId, userId, source }) {
-  console.log('[patrol-debug] capturePatrolLocationSnapshot: requesting getBrowserPosition', { patrolId, userId, source });
   const position = await getBrowserPosition();
-  console.log('[patrol-debug] capturePatrolLocationSnapshot: got position, calling persistPatrolPosition (saveLocationLog)');
   const record = await persistPatrolPosition(position, patrolId, userId, source);
-  console.log('[patrol-debug] capturePatrolLocationSnapshot: persist complete', { record });
   return { position, record };
 }
 
@@ -126,20 +123,16 @@ export async function startPatrolTracking({ patrolId, userId, skipInitialPersist
 
   if (!skipInitialPersistAndFetch) {
     try {
-      console.log('[patrol-debug] startPatrolTracking: fetching initial position before watch');
       const initial = await getBrowserPosition();
       const saved = await persistPatrolPosition(initial, patrolId, userId, LOCATION_SOURCE.LIVE);
-      console.log('[patrol-debug] startPatrolTracking: initial position persisted', { saved });
       onLocationSaved?.(saved);
       onPosition?.(initial);
     } catch (e) {
       const normalized = e && typeof e === 'object' && typeof e.code === 'string' ? e : normalizeGeolocationError(e);
-      console.error('[patrol-debug] startPatrolTracking: initial position failed', normalized);
+      console.error('[patrol/geolocation] initial position failed', normalized);
       onError?.(normalized);
       throw normalized;
     }
-  } else {
-    console.log('[patrol-debug] startPatrolTracking: skipInitialPersistAndFetch=true — registering watch only');
   }
 
   activeWatchId = browserWatchPosition(
@@ -147,19 +140,17 @@ export async function startPatrolTracking({ patrolId, userId, skipInitialPersist
       (async () => {
         try {
           const saved = await persistPatrolPosition(position, patrolId, userId, LOCATION_SOURCE.LIVE);
-          console.log('[patrol-debug] startPatrolTracking watch: position persisted (saveLocationLog)', { saved });
           onLocationSaved?.(saved);
           onPosition?.(position);
         } catch (persistErr) {
           const wrapped = persistErr instanceof Error ? persistErr : new Error(String(persistErr));
-          console.error('[patrol-debug] startPatrolTracking watch: persist failed', persistErr);
           onError?.(wrapped);
           console.warn('[patrol/geolocation] saveLocationLog failed', persistErr);
         }
       })();
     },
     (err) => {
-      console.error('[patrol-debug] startPatrolTracking watch: browser error callback', err);
+      console.error('[patrol/geolocation] watch error', err);
       onError?.(err);
     }
   );

@@ -1,30 +1,88 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-const AUTH_USER_KEY = 'auth_user';
+import broadcastService from 'services/realtime/broadcastService';
+import { AUTH_TOKEN_KEY, AUTH_USER_KEY, clearAuthSession, getAuthUser } from 'utils/auth';
+
+import authService from '../datasources/authService';
+import { AuthRepository } from '../repositories/authRepository';
+
+const authRepository = new AuthRepository(authService);
 
 function readStoredUser() {
-  try {
-    const raw = localStorage.getItem(AUTH_USER_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  return getAuthUser();
 }
 
-/** Minimal auth hook (user payload from login); extend later with JWT/API sync. */
+/** Auth hook: stored user, logout flow, cross-tab session sync. */
 export function useAuthController() {
+  const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(() => readStoredUser());
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
+  const logoutInProgress = useRef(false);
 
   useEffect(() => {
     const onStorage = (event) => {
-      if (event.key === AUTH_USER_KEY || event.key === null) {
-        setCurrentUser(readStoredUser());
+      if (event.key !== AUTH_USER_KEY && event.key !== AUTH_TOKEN_KEY && event.key !== null) {
+        return;
+      }
+
+      const tokenRemoved =
+        event.key === AUTH_TOKEN_KEY && event.newValue == null && event.oldValue != null;
+      const userRemoved = event.key === AUTH_USER_KEY && event.newValue == null && event.oldValue != null;
+      const cleared = event.key === null;
+
+      setCurrentUser(readStoredUser());
+
+      if ((tokenRemoved || userRemoved || cleared) && !localStorage.getItem(AUTH_TOKEN_KEY)) {
+        broadcastService.disconnect();
+        if (window.location.pathname !== '/login') {
+          navigate('/login', { replace: true });
+        }
       }
     };
+
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  }, [navigate]);
 
-  return { currentUser };
+  const handleLogout = useCallback(async () => {
+    if (logoutInProgress.current) {
+      return;
+    }
+
+    logoutInProgress.current = true;
+    setLogoutLoading(true);
+    setLogoutError('');
+
+    try {
+      await authRepository.logout();
+    } catch (error) {
+      const status = error?.status;
+      const isNetworkFailure = !status && error?.message !== 'Unauthorized';
+      if (status && status !== 401) {
+        setLogoutError('Could not reach the server. You have been signed out locally.');
+      } else if (isNetworkFailure) {
+        setLogoutError('Could not reach the server. You have been signed out locally.');
+      }
+    } finally {
+      logoutInProgress.current = false;
+      try {
+        broadcastService.disconnect();
+      } catch (err) {
+        console.warn('[auth] realtime disconnect failed', err);
+      }
+      clearAuthSession();
+      setCurrentUser(null);
+      setLogoutLoading(false);
+      navigate('/login', { replace: true });
+    }
+  }, [navigate]);
+
+  return {
+    currentUser,
+    logoutLoading,
+    logoutError,
+    handleLogout
+  };
 }

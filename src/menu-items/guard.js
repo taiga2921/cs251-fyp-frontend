@@ -21,7 +21,7 @@ const guard = {
       id: 'guard-patrol',
       title: 'Patrol',
       type: 'item',
-      url: '/guard/patrol',
+      url: '/patrol',
       icon: icons.IconShieldChevron
     }
     // {

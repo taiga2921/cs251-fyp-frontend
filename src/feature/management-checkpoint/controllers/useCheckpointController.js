@@ -1,37 +1,90 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-export const useCheckpointController = (repository, zoneId) => {
+export const useCheckpointController = (repository, { zoneId: scopedZoneId = null } = {}) => {
   const navigate = useNavigate();
   const [checkpoints, setCheckpoints] = useState([]);
-  const [zone, setZone] = useState([]);
-  const [selected, setSelected] = useState([]);
+  const [zone, setZone] = useState(null);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
   const [filterText, setFilterText] = useState('');
+  const [zoneFilter, setZoneFilter] = useState(scopedZoneId ?? '');
+  const [activeFilter, setActiveFilter] = useState('');
+  const [locationTypeFilter, setLocationTypeFilter] = useState('');
+  const [zones, setZones] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [feedback, setFeedback] = useState({ type: '', message: '' });
 
-  useEffect(() => {
-    loadCheckpoints();
-  }, [zoneId]);
+  const loadZones = useCallback(async () => {
+    try {
+      const payload = await repository.getZones();
+      setZones(repository.normalizeZonesList(payload));
+    } catch (err) {
+      console.error('Failed to load zones:', err);
+    }
+  }, [repository]);
 
-  const loadCheckpoints = async () => {
+  const loadCheckpoints = useCallback(async () => {
     try {
       setLoading(true);
-      const checkpointData = await repository.getAllCheckpointsByZoneId(zoneId);
-      const zoneData = await repository.getZoneById(zoneId);
-      console.log(checkpointData.data.data);
-      console.log(zoneData.data);
-      setCheckpoints(checkpointData.data.data);
-      setZone(zoneData.data);
-    } catch (error) {
-      console.error('Failed to load checkpoints:', error);
+      setError('');
+
+      const params = {
+        page: page + 1,
+        per_page: rowsPerPage,
+        search: filterText.trim() || undefined,
+        zone_id: zoneFilter || undefined,
+        location_type: locationTypeFilter || undefined
+      };
+
+      if (activeFilter !== '') {
+        params.is_active = activeFilter === 'true';
+      }
+
+      const payload = await repository.getCheckpoints(params);
+      const normalized = repository.normalizeCheckpointListResponse(payload);
+      setCheckpoints(normalized.items);
+      setTotalCount(normalized.total);
+
+    } catch (err) {
+      console.error('Failed to load checkpoints:', err);
+      setError(err?.message || 'Failed to load checkpoints.');
+      setCheckpoints([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [repository, page, rowsPerPage, filterText, zoneFilter, activeFilter, locationTypeFilter, scopedZoneId]);
 
-  const handleChangePage = (event, newPage) => {
+  useEffect(() => {
+    if (!scopedZoneId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const zonePayload = await repository.getZoneById(scopedZoneId);
+        if (!cancelled) {
+          setZone(zonePayload?.data ?? zonePayload);
+        }
+      } catch (err) {
+        console.error('Failed to load zone:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [repository, scopedZoneId]);
+
+  useEffect(() => {
+    loadZones();
+  }, [loadZones]);
+
+  useEffect(() => {
+    loadCheckpoints();
+  }, [loadCheckpoints]);
+
+  const handleChangePage = (_event, newPage) => {
     setPage(newPage);
   };
 
@@ -40,89 +93,95 @@ export const useCheckpointController = (repository, zoneId) => {
     setPage(0);
   };
 
-  const handleSelectAllClick = (event) => {
-    if (event.target.checked) {
-      const newSelected = checkpoints.map((n) => n.id);
-      setSelected(newSelected);
-      return;
-    }
-    setSelected([]);
-  };
-
-  const handleRowClick = (event, id) => {
-    const selectedIndex = selected.indexOf(id);
-    let newSelected = [];
-
-    if (selectedIndex === -1) {
-      newSelected = newSelected.concat(selected, id);
-    } else if (selectedIndex === 0) {
-      newSelected = newSelected.concat(selected.slice(1));
-    } else if (selectedIndex === selected.length - 1) {
-      newSelected = newSelected.concat(selected.slice(0, -1));
-    } else if (selectedIndex > 0) {
-      newSelected = newSelected.concat(selected.slice(0, selectedIndex), selected.slice(selectedIndex + 1));
-    }
-
-    setSelected(newSelected);
-  };
-
   const handleFilterChange = (text) => {
     setFilterText(text);
     setPage(0);
   };
 
+  const handleZoneFilterChange = (value) => {
+    if (scopedZoneId) return;
+    setZoneFilter(value);
+    setPage(0);
+  };
+
+  const handleActiveFilterChange = (value) => {
+    setActiveFilter(value);
+    setPage(0);
+  };
+
+  const handleLocationTypeFilterChange = (value) => {
+    setLocationTypeFilter(value);
+    setPage(0);
+  };
+
   const handleAddCheckpoint = () => {
-    navigate(`/admin/management-checkpoint/add/${zoneId}`);
+    if (scopedZoneId) {
+      navigate(`/admin/management-checkpoint/create`, { state: { zoneId: scopedZoneId } });
+      return;
+    }
+    navigate('/admin/management-checkpoint/create');
   };
 
   const handleViewCheckpoint = (checkpointId) => {
-    navigate(`/admin/management-checkpoint/view/${checkpointId}`);
+    navigate(`/admin/management-checkpoint/${checkpointId}`);
   };
 
   const handleEditCheckpoint = (checkpointId) => {
-    navigate(`/admin/management-checkpoint/edit/${zoneId}/${checkpointId}`);
+    navigate(`/admin/management-checkpoint/${checkpointId}/edit`);
   };
 
   const handleDeleteCheckpoint = async (checkpointId) => {
-    if (window.confirm('Are you sure you want to delete this checkpoint?')) {
-      try {
-        await repository.deleteCheckpoint(checkpointId);
-        await loadCheckpoints();
-      } catch (error) {
-        console.error('Failed to delete checkpoint:', error);
-        alert('Failed to delete checkpoint');
-      }
+    if (!window.confirm('Are you sure you want to delete this checkpoint?')) {
+      return;
+    }
+
+    try {
+      await repository.deleteCheckpoint(checkpointId);
+      setFeedback({ type: 'success', message: 'Checkpoint deleted successfully.' });
+      await loadCheckpoints();
+    } catch (err) {
+      console.error('Failed to delete checkpoint:', err);
+      setFeedback({ type: 'error', message: err?.message || 'Failed to delete checkpoint.' });
     }
   };
 
   const handleBack = () => {
-    navigate('/admin/management-zone');
+    if (scopedZoneId) {
+      navigate('/admin/management-zone');
+      return;
+    }
+    navigate('/dashboard');
   };
 
-  const isSelected = (id) => selected.indexOf(id) !== -1;
-
-  const filteredCheckpoints = repository.filterCheckpoints(checkpoints, filterText);
-  const paginatedCheckpoints = repository.paginateCheckpoints(filteredCheckpoints, page, rowsPerPage);
+  const clearFeedback = () => setFeedback({ type: '', message: '' });
 
   return {
-    checkpoints: paginatedCheckpoints,
+    checkpoints,
     zone,
-    filteredCount: filteredCheckpoints.length,
-    selected,
+    zones,
+    scopedZoneId,
     page,
     rowsPerPage,
+    totalCount,
     filterText,
+    zoneFilter: scopedZoneId || zoneFilter,
+    activeFilter,
+    locationTypeFilter,
     loading,
-    isSelected,
+    error,
+    feedback,
+    clearFeedback,
     handleBack,
     handleChangePage,
     handleChangeRowsPerPage,
-    handleSelectAllClick,
-    handleRowClick,
     handleFilterChange,
+    handleZoneFilterChange,
+    handleActiveFilterChange,
+    handleLocationTypeFilterChange,
     handleAddCheckpoint,
     handleViewCheckpoint,
     handleEditCheckpoint,
-    handleDeleteCheckpoint
+    handleDeleteCheckpoint,
+    reload: loadCheckpoints
   };
 };

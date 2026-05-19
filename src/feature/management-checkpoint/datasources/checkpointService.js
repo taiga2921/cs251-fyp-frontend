@@ -1,12 +1,10 @@
 import api from 'api/api';
+import zoneService from 'feature/management-zone/datasources/zoneService';
 
-const extractValidationErrors = (details) => {
-  return details?.data?.errors || details?.errors || null;
-};
+const extractValidationErrors = (details) => details?.data?.errors || details?.errors || null;
 
 const extractFirstValidationMessage = (validationErrors) => {
   if (!validationErrors || typeof validationErrors !== 'object') return null;
-
   const firstFieldErrors = Object.values(validationErrors).find((messages) => Array.isArray(messages) && messages.length > 0);
   return Array.isArray(firstFieldErrors) ? firstFieldErrors[0] : null;
 };
@@ -37,76 +35,77 @@ const buildServiceError = (error, action) => {
 
 const extractResponsePayload = (response) => response?.data;
 
+const buildQueryString = (params = {}) => {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    query.set(key, String(value));
+  });
+  const qs = query.toString();
+  return qs ? `?${qs}` : '';
+};
+
 const checkpointService = {
-   // Get all checkpoints
-   getAllCheckpoints: async () => {
-      try {
-         const response = await api.get('/checkpoints');
-         return extractResponsePayload(response);
-      } catch (error) {
-         throw buildServiceError(error, 'fetch checkpoints');
-      }
-   },
-   
-   // Get single zone
-   getZoneById: async (id) => {
-      try {
-         const response = await api.get(`/zones/${id}`);
-         return extractResponsePayload(response);
-      } catch (error) {
-         throw buildServiceError(error, 'fetch zone');
-      }  
-   },
+  async getCheckpoints(params = {}) {
+    try {
+      const response = await api.get(`/checkpoints${buildQueryString(params)}`);
+      return extractResponsePayload(response);
+    } catch (error) {
+      throw buildServiceError(error, 'fetch checkpoints');
+    }
+  },
 
-   // Get all checkpoints by zone id
-   getAllCheckpointsByZoneId: async (id) => {
-      try {
-         const response = await api.get(`/checkpoints?zone_id=${id}`);
-         return extractResponsePayload(response);
-      } catch (error) {
-         throw buildServiceError(error, 'fetch checkpoints by zone');
-      }
-   },
+  async getCheckpointById(id) {
+    try {
+      const response = await api.get(`/checkpoints/${id}`);
+      return extractResponsePayload(response);
+    } catch (error) {
+      throw buildServiceError(error, 'fetch checkpoint');
+    }
+  },
 
-   // Get single checkpoint
-   getCheckpointById: async (id) => {
-      try {
-         const response = await api.get(`/checkpoints/${id}`);
-         return extractResponsePayload(response);
-      } catch (error) {
-         throw buildServiceError(error, 'fetch checkpoint');
-      }
-   },
+  async createCheckpoint(data) {
+    try {
+      const response = await api.post('/checkpoints', data);
+      return extractResponsePayload(response);
+    } catch (error) {
+      throw buildServiceError(error, 'create checkpoint');
+    }
+  },
 
-   // Create checkpoint
-   createCheckpoint: async (checkpointData) => {
-      try {
-         const response = await api.post('/checkpoints', checkpointData);
-         return extractResponsePayload(response);
-      } catch (error) {
-         throw buildServiceError(error, 'create checkpoint');
-      }
-   },
+  async updateCheckpoint(id, data) {
+    try {
+      const response = await api.patch(`/checkpoints/${id}`, data);
+      return extractResponsePayload(response);
+    } catch (error) {
+      throw buildServiceError(error, 'update checkpoint');
+    }
+  },
 
-   // Update checkpoint
-   updateCheckpoint: async (id, checkpointData) => {
-      try {
-         const response = await api.patch(`/checkpoints/${id}`, checkpointData);
-         return extractResponsePayload(response);
-      } catch (error) {
-         throw buildServiceError(error, 'update checkpoint');
-      }
-   },
+  async deleteCheckpoint(id) {
+    try {
+      const response = await api.delete(`/checkpoints/${id}`);
+      return extractResponsePayload(response);
+    } catch (error) {
+      throw buildServiceError(error, 'delete checkpoint');
+    }
+  },
 
-   // Delete checkpoint
-   deleteCheckpoint: async (id) => {
-      try {
-         const response = await api.delete(`/checkpoints/${id}`);
-         return extractResponsePayload(response);
-      } catch (error) {
-         throw buildServiceError(error, 'delete checkpoint');
-      }
-   }
+  async getZones() {
+    try {
+      return await zoneService.getAllZones();
+    } catch (error) {
+      throw buildServiceError(error, 'fetch zones');
+    }
+  },
+
+  async getZoneById(id) {
+    try {
+      return await zoneService.getZoneById(id);
+    } catch (error) {
+      throw buildServiceError(error, 'fetch zone');
+    }
+  }
 };
 
 export default checkpointService;

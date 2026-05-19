@@ -1,13 +1,20 @@
-import { TableHead, TableRow, TableCell } from '@mui/material';
+import { TableCell, TableHead, TableRow } from '@mui/material';
 
-export const CheckpointTableHeader = () => {
+export function CheckpointTableHeader() {
   return (
     <TableHead sx={{ backgroundColor: 'secondary.light' }}>
       <TableRow>
-        <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }} align="center">
-          No
-        </TableCell>
         <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }}>Name</TableCell>
+        <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }}>Zone</TableCell>
+        <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }} align="center">
+          Type
+        </TableCell>
+        <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }} align="center">
+          Radius (m)
+        </TableCell>
+        <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }} align="center">
+          Status
+        </TableCell>
         <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }} align="center">
           Latitude
         </TableCell>
@@ -15,12 +22,12 @@ export const CheckpointTableHeader = () => {
           Longitude
         </TableCell>
         <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }} align="center">
-          Last Modified
+          Updated
         </TableCell>
         <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }} align="center">
-          Action
+          Actions
         </TableCell>
       </TableRow>
     </TableHead>
   );
-};
+}

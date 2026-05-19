@@ -1,3 +1,4 @@
+import { registerPwaSyncQueueBackgroundSync } from './backgroundSyncService';
 import { db } from './db';
 
 export const SYNC_STATUS_PENDING = 'pending';
@@ -87,6 +88,12 @@ export async function saveLocationLog(locationLog) {
       payload
     });
   });
+
+  try {
+    await registerPwaSyncQueueBackgroundSync();
+  } catch {
+    /* registration is best-effort; online event + Retry Sync remain */
+  }
 
   return record;
 }

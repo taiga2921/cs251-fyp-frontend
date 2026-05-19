@@ -1,6 +1,9 @@
 import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 
+import { PWA_SYNC_REQUEST_MESSAGE_TYPE } from 'pwa/backgroundSyncService';
+import { flushSyncQueue, registerBackgroundSyncIfQueueHasWork } from 'pwa/syncService';
+
 // project imports
 import App from 'App';
 import reportWebVitals from 'reportWebVitals';
@@ -63,6 +66,21 @@ if (typeof window !== 'undefined') {
     window.addEventListener('offline', () => console.info('[PWA] Browser reports offline'));
   } catch (e) {
     console.warn('[PWA] Network status listeners failed:', e);
+  }
+
+  try {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type !== PWA_SYNC_REQUEST_MESSAGE_TYPE) {
+          return;
+        }
+        console.info('[PWA] Service worker requested sync flush');
+        flushSyncQueue();
+      });
+    }
+    registerBackgroundSyncIfQueueHasWork().catch(() => {});
+  } catch (e) {
+    console.warn('[PWA] Background Sync setup failed:', e);
   }
 }
 

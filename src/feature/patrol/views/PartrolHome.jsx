@@ -6,6 +6,7 @@ import { usePatrolController } from '../controllers/usePatrolController';
 import patrolService from '../datasources/patrolService';
 import { PatrolTracking } from '../components/PatrolTracking';
 import PatrolPwaStatusPanel from '../components/PatrolPwaStatusPanel';
+import PatrolSummaryCard from '../components/PatrolSummaryCard';
 
 import { SelectFieldContainer } from 'ui-component/SelectFieldContainer';
 import { IconPlayerPlay } from '@tabler/icons-react';
@@ -38,6 +39,22 @@ export default function PatrolHome() {
 
   const patrolTrackingActive = Boolean(patrolCurrentLocation) && controller.cpNumber > 0;
   const patrolId = controller.patrols?.data?.id ?? null;
+  const showPatrolSummary =
+    controller.patrolSummaryLoading ||
+    controller.patrolSummary ||
+    controller.patrolSummaryError ||
+    controller.validationResult ||
+    controller.validationError ||
+    controller.validationWarning ||
+    (controller.finalizingStep && controller.finalizingStep !== 'idle');
+
+  const stopPatrolLabelByStep = {
+    syncing: 'Syncing logs...',
+    validating: 'Validating patrol...',
+    loading_summary: 'Loading summary...'
+  };
+  const stopPatrolLabel = stopPatrolLabelByStep[controller.finalizingStep] ?? 'Stop Patrol';
+  const stopPatrolDisabled = controller.isFinalizingPatrol || controller.patrolLoading;
 
   return (
     <>
@@ -88,11 +105,31 @@ export default function PatrolHome() {
           />
           <Box sx={{ mt: 2 }}>{controller.distanceCalc}</Box>
           <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button variant="contained" color="secondary" onClick={controller.completePatrol}>
-              Stop Patrol
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={controller.completePatrol}
+              disabled={stopPatrolDisabled}
+              startIcon={stopPatrolDisabled ? <CircularProgress size={18} color="inherit" /> : undefined}
+            >
+              {stopPatrolLabel}
             </Button>
           </Box>
         </Box>
+
+        {showPatrolSummary ? (
+          <PatrolSummaryCard
+            summary={controller.patrolSummary}
+            loading={controller.patrolSummaryLoading}
+            error={controller.patrolSummaryError}
+            summaryMayBeIncomplete={controller.summaryMayBeIncomplete}
+            finalizingStep={controller.finalizingStep}
+            validatingPatrol={controller.validatingPatrol}
+            validationError={controller.validationError}
+            validationWarning={controller.validationWarning}
+            validationResult={controller.validationResult}
+          />
+        ) : null}
       </Box>
     </>
   );

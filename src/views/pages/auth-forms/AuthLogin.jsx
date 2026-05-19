@@ -18,7 +18,7 @@ import Box from '@mui/material/Box';
 import AnimateButton from 'ui-component/extended/AnimateButton';
 import CustomFormControl from 'ui-component/extended/Form/CustomFormControl';
 import api from 'api/api';
-import { setAuthToken } from 'utils/auth';
+import { getAuthUserRole, getDefaultRouteForRole, setAuthToken, setAuthUser } from 'utils/auth';
 
 // assets
 import Visibility from '@mui/icons-material/Visibility';
@@ -117,9 +117,10 @@ export default function AuthLogin() {
 
       setAuthToken(token);
       if (user) {
-        localStorage.setItem('auth_user', JSON.stringify(user));
+        setAuthUser(user);
       }
-      navigate('/dashboard', { replace: true });
+      const role = getAuthUserRole();
+      navigate(getDefaultRouteForRole(role), { replace: true });
     } catch (error) {
       const message = extractErrorMessage(error);
       setSubmitError(message);

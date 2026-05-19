@@ -26,6 +26,8 @@ import Box from '@mui/material/Box';
 import MainCard from 'ui-component/cards/MainCard';
 import Transitions from 'ui-component/extended/Transitions';
 import useConfig from 'hooks/useConfig';
+import { useAuthController } from 'feature/authentication/controllers/useAuthController';
+import { getAuthUserRole } from 'utils/auth';
 
 // assets
 import User1 from 'assets/images/users/user-round.svg';
@@ -39,9 +41,10 @@ export default function ProfileSection() {
     state: { borderRadius }
   } = useConfig();
 
-  const [sdm, setSdm] = useState(true);
-  const [value, setValue] = useState('');
-  const [notification, setNotification] = useState(false);
+  const { currentUser, logoutLoading, logoutError, handleLogout } = useAuthController();
+  const roleName = getAuthUserRole();
+  const displayName = currentUser?.name ?? 'User';
+
   const [open, setOpen] = useState(false);
 
   /**
@@ -119,12 +122,12 @@ export default function ProfileSection() {
                     <Box sx={{ p: 2, pb: 0 }}>
                       <Stack>
                         <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
-                          <Typography variant="h4">Good Morning,</Typography>
+                          <Typography variant="h4">Signed in as</Typography>
                           <Typography component="span" variant="h4" sx={{ fontWeight: 400 }}>
-                            Johne Doe
+                            {displayName}
                           </Typography>
                         </Stack>
-                        <Typography variant="subtitle2">Project Admin</Typography>
+                        <Typography variant="subtitle2">{roleName ?? 'Unknown role'}</Typography>
                       </Stack>
                       {/* <OutlinedInput
                         sx={{ width: '100%', pr: 1, pl: 2, my: 2 }}
@@ -207,12 +210,25 @@ export default function ProfileSection() {
                             }
                           />
                         </ListItemButton>
-                        <ListItemButton sx={{ borderRadius: `${borderRadius}px` }}>
+                        <ListItemButton
+                          sx={{ borderRadius: `${borderRadius}px` }}
+                          onClick={handleLogout}
+                          disabled={logoutLoading}
+                        >
                           <ListItemIcon>
                             <IconLogout stroke={1.5} size="20px" />
                           </ListItemIcon>
-                          <ListItemText primary={<Typography variant="body2">Logout</Typography>} />
+                          <ListItemText
+                            primary={
+                              <Typography variant="body2">{logoutLoading ? 'Logging out...' : 'Logout'}</Typography>
+                            }
+                          />
                         </ListItemButton>
+                        {logoutError ? (
+                          <Typography variant="caption" color="error" sx={{ display: 'block', px: 2, pb: 1 }}>
+                            {logoutError}
+                          </Typography>
+                        ) : null}
                       </List>
                     </Box>
                   </MainCard>

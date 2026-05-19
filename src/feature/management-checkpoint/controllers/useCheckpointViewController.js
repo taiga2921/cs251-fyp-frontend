@@ -1,41 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export const useCheckpointViewController = (repository, checkpointId) => {
-   const navigate = useNavigate();
-   const [checkpoint, setCheckpoint] = useState(null);
-   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const [checkpoint, setCheckpoint] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-   useEffect(() => {
-      loadCheckpoint();
-   }, [checkpointId]);
+  useEffect(() => {
+    loadCheckpoint();
+  }, [checkpointId]);
 
-   const loadCheckpoint = async () => {
-      try {
-         setLoading(true);
-         const checkpointData = await repository.getCheckpointById(checkpointId);
-         console.log(checkpointData.data);
-         setCheckpoint(checkpointData);
-      } catch (error) {
-         console.error('Failed to load checkpoint:', error);
-         alert('Failed to load checkpoint data');
-      } finally {
-         setLoading(false);
+  const loadCheckpoint = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const response = await repository.getCheckpointById(checkpointId);
+      setCheckpoint(response?.data ?? response);
+    } catch (err) {
+      console.error('Failed to load checkpoint:', err);
+      setCheckpoint(null);
+      if (err?.status === 404) {
+        setError('Checkpoint not found.');
+      } else {
+        setError(err?.message || 'Failed to load checkpoint.');
       }
-   };
+    } finally {
+      setLoading(false);
+    }
+  };
 
-   const handleBack = () => {
-      navigate(`/admin/management-zone/view/${checkpoint.data.zone.id}`);
-   };
+  const handleBack = () => {
+    navigate('/admin/management-checkpoint');
+  };
 
-   const handleEdit = () => {
-      navigate(`/admin/management-checkpoint/edit/${checkpoint.data.zone.id}/${checkpointId}`);
-   };
+  const handleEdit = () => {
+    navigate(`/admin/management-checkpoint/${checkpointId}/edit`);
+  };
 
-   return {
-      checkpoint,
-      loading,
-      handleBack,
-      handleEdit
-   };
+  return {
+    checkpoint,
+    loading,
+    error,
+    handleBack,
+    handleEdit
+  };
 };

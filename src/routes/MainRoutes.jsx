@@ -5,6 +5,9 @@ import { Navigate } from 'react-router-dom';
 import MainLayout from 'layout/MainLayout';
 import Loadable from 'ui-component/Loadable';
 import ProtectedRoute from './guards/ProtectedRoute';
+import RoleProtectedRoute from './guards/RoleProtectedRoute';
+import RoleHomeRedirect from './guards/RoleHomeRedirect';
+import { ROLES } from 'utils/auth';
 
 // dashboard routing
 const DashboardDefault = Loadable(lazy(() => import('views/dashboard/Default')));
@@ -28,11 +31,14 @@ const AdminZoneManagementAdd = Loadable(lazy(() => import('../feature/management
 const AdminZoneManagementEdit = Loadable(lazy(() => import('../feature/management-zone/views/ZoneEdit')));
 
 const AdminCheckpointManagement = Loadable(lazy(() => import('../feature/management-checkpoint/views/CheckpointList')));
+const AdminCheckpointManagementCreate = Loadable(lazy(() => import('../feature/management-checkpoint/views/CheckpointCreate')));
 const AdminCheckpointManagementView = Loadable(lazy(() => import('../feature/management-checkpoint/views/CheckpointView')));
-const AdminCheckpointManagementAdd = Loadable(lazy(() => import('../feature/management-checkpoint/views/CheckpointAdd')));
 const AdminCheckpointManagementEdit = Loadable(lazy(() => import('../feature/management-checkpoint/views/CheckpointEdit')));
 
-// const AdminBlockchain = Loadable(lazy(() => import('../feature/blockchain/views/GateLiveList')));
+const AdminPatrolMonitoring = Loadable(lazy(() => import('../feature/patrol-monitoring/views/PatrolMonitoringDashboard')));
+const AdminPatrolSessionDetail = Loadable(lazy(() => import('../feature/patrol-monitoring/views/PatrolSessionDetail')));
+
+const Forbidden = Loadable(lazy(() => import('views/errors/Forbidden')));
 
 // utilities routing
 const UtilsTypography = Loadable(lazy(() => import('views/utilities/Typography')));
@@ -41,6 +47,12 @@ const UtilsShadow = Loadable(lazy(() => import('views/utilities/Shadow')));
 
 // sample page routing
 const SamplePage = Loadable(lazy(() => import('views/sample-page')));
+
+const adminOnly = (element) => <RoleProtectedRoute allowedRoles={[ROLES.ADMIN]}>{element}</RoleProtectedRoute>;
+const adminOrOperator = (element) => (
+  <RoleProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SECURITY_OPERATOR]}>{element}</RoleProtectedRoute>
+);
+const guardOnly = (element) => <RoleProtectedRoute allowedRoles={[ROLES.GUARD]}>{element}</RoleProtectedRoute>;
 
 // ==============================|| MAIN ROUTING ||============================== //
 
@@ -54,118 +66,121 @@ const MainRoutes = {
   children: [
     {
       index: true,
-      element: <Navigate to="/dashboard" replace />
+      element: <RoleHomeRedirect />
+    },
+    {
+      path: 'forbidden',
+      element: <Forbidden />
     },
     {
       path: 'dashboard',
-      element: <DashboardDefault />
+      element: adminOnly(<DashboardDefault />)
     },
     {
       path: 'dashboard/default',
-      element: <DashboardDefault />
+      element: adminOnly(<DashboardDefault />)
     },
 
     // ----------------- GUARD ROUTES ----------------- //
 
-    // Patrol
+    {
+      path: 'patrol',
+      element: guardOnly(<GuardPatrol />)
+    },
     {
       path: 'guard/patrol',
-      element: <GuardPatrol />
+      element: <Navigate to="/patrol" replace />
     },
 
-    // ----------------- OPERATOR ROUTES ----------------- //
+    // ----------------- OPERATOR ROUTES (admin only) ----------------- //
 
-    // Patrol
     {
-       path: 'operator/patrol/live-tracking',
-       element: <OperatorPatrolLiveTracking />
+      path: 'operator/patrol/live-tracking',
+      element: adminOnly(<OperatorPatrolLiveTracking />)
     },
     {
       path: 'operator/patrol/history',
-      element: <OperatorPatrolHistory />
+      element: adminOnly(<OperatorPatrolHistory />)
     },
     {
       path: 'operator/patrol/history/view/:patrolHistoryId',
-      element: <OperatorPatrolHistoryView />
+      element: adminOnly(<OperatorPatrolHistoryView />)
     },
-
-    // // Gate ANPR
-    // {
-    //    path: 'operator/gate/anprLive',
-    //    element: <OperatorGateLive />
-    // },
-    // {
-    //    path: 'operator/gate/history',
-    //    element: <OperatorGateHistory />
-    // },
 
     // =================== ADMIN ROUTES =================== //
 
-    // Admin Routes - User Management
     {
       path: 'admin/management-user',
-      element: <AdminUserManagement />
+      element: adminOnly(<AdminUserManagement />)
     },
     {
       path: 'admin/management-user/view/:userId',
-      element: <AdminUserManagementView />
+      element: adminOnly(<AdminUserManagementView />)
     },
     {
       path: 'admin/management-user/add',
-      element: <AdminUserManagementAdd />
+      element: adminOnly(<AdminUserManagementAdd />)
     },
     {
       path: 'admin/management-user/edit/:userId',
-      element: <AdminUserManagementEdit />
+      element: adminOnly(<AdminUserManagementEdit />)
     },
-
-    // Admin Routes - Zone Management
     {
       path: 'admin/management-zone',
-      element: <AdminZoneManagement />
+      element: adminOnly(<AdminZoneManagement />)
     },
     {
       path: 'admin/management-zone/add',
-      element: <AdminZoneManagementAdd />
+      element: adminOnly(<AdminZoneManagementAdd />)
     },
     {
       path: 'admin/management-zone/edit/:zoneId',
-      element: <AdminZoneManagementEdit />
+      element: adminOnly(<AdminZoneManagementEdit />)
     },
-
-    // Admin Routes - Checkpoint Management
     {
       path: 'admin/management-zone/view/:zoneId',
-      element: <AdminCheckpointManagement />
+      element: adminOnly(<AdminCheckpointManagement />)
     },
     {
-      path: 'admin/management-checkpoint/view/:checkpointId',
-      element: <AdminCheckpointManagementView />
+      path: 'admin/management-checkpoint',
+      element: adminOnly(<AdminCheckpointManagement />)
     },
     {
-      path: 'admin/management-checkpoint/add/:zoneId',
-      element: <AdminCheckpointManagementAdd />
+      path: 'admin/management-checkpoint/create',
+      element: adminOnly(<AdminCheckpointManagementCreate />)
     },
     {
-      path: 'admin/management-checkpoint/edit/:zoneId/:checkpointId',
-      element: <AdminCheckpointManagementEdit />
+      path: 'admin/management-checkpoint/:checkpointId/edit',
+      element: adminOnly(<AdminCheckpointManagementEdit />)
+    },
+    {
+      path: 'admin/management-checkpoint/:checkpointId',
+      element: adminOnly(<AdminCheckpointManagementView />)
+    },
+    {
+      path: 'admin/patrol-monitoring',
+      element: adminOrOperator(<AdminPatrolMonitoring />)
+    },
+    {
+      path: 'admin/patrol-monitoring/:patrolSessionId',
+      element: adminOrOperator(<AdminPatrolSessionDetail />)
     },
 
     {
       path: 'typography',
-      element: <UtilsTypography />
+      element: adminOnly(<UtilsTypography />)
     },
     {
       path: 'color',
-      element: <UtilsColor />
+      element: adminOnly(<UtilsColor />)
     },
     {
       path: 'shadow',
-      element: <UtilsShadow />
+      element: adminOnly(<UtilsShadow />)
     },
     {
       path: '/sample-page',
-      element: <SamplePage />
+      element: adminOnly(<SamplePage />)
     }
   ]
 };

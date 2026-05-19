@@ -180,9 +180,21 @@ const patrolService = {
   updateCheckpointLog: async (logId, data) => {
     try {
       const body = {};
+      if (data.status != null) body.status = data.status;
+      if (data.detected_at != null) body.detected_at = data.detected_at;
+      if (data.detection_type != null) body.detection_type = data.detection_type;
+      if (data.confidence_score != null) body.confidence_score = data.confidence_score;
       if (data.is_within_geofence === true) {
-        body.status = 'verified';
-        body.detected_at = data.actual_time ?? new Date().toISOString();
+        body.status = body.status ?? 'verified';
+        body.detected_at = body.detected_at ?? data.actual_time ?? new Date().toISOString();
+        if (body.detection_type == null) {
+          body.detection_type = 'continuous';
+          body.confidence_score = body.confidence_score ?? 80;
+        } else if (body.confidence_score == null && body.detection_type === 'resume') {
+          body.confidence_score = 65;
+        } else if (body.confidence_score == null) {
+          body.confidence_score = 80;
+        }
       }
       const response = await api.patch(`/checkpoint-events/${logId}`, body);
       return normalizeCheckpointEnvelope(response.data);
@@ -194,6 +206,28 @@ const patrolService = {
   createPatrolRoute: async (data) => {
     try {
       const response = await api.post('/patrol-routes', data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  getPatrolSummary: async (patrolSessionId) => {
+    try {
+      const response = await api.get(`/patrol-sessions/${patrolSessionId}/summary`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Backend validation engine (Milestone 1) — authoritative checkpoint scoring.
+   * Call after PWA sync flush while online.
+   */
+  validatePatrolSession: async (patrolSessionId) => {
+    try {
+      const response = await api.post(`/patrol-sessions/${patrolSessionId}/validate`);
       return response.data;
     } catch (error) {
       throw error;

@@ -42,3 +42,21 @@ db.version(3)
         if (row.trackingState === undefined) row.trackingState = 'active';
       });
   });
+
+db.version(4)
+  .stores({
+    location_logs: 'id, patrolId, userId, timestamp, syncStatus, source, trackingState',
+    sync_queue: 'id, type, status, createdAt, retryCount, resultStatus',
+    patrol_sessions: 'patrolId, status, startTime',
+    notifications: 'id, type, timestamp, read'
+  })
+  .upgrade(async (tx) => {
+    await tx
+      .table('sync_queue')
+      .toCollection()
+      .modify((row) => {
+        if (row.resultStatus === undefined) row.resultStatus = null;
+        if (row.errorMessage === undefined) row.errorMessage = null;
+        if (row.lastAttempt === undefined) row.lastAttempt = null;
+      });
+  });

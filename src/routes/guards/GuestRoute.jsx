@@ -1,11 +1,11 @@
 import PropTypes from 'prop-types';
 import { Navigate, Outlet } from 'react-router-dom';
 
-import { hasAuthToken } from 'utils/auth';
+import { getAuthUserRole, getDefaultRouteForRole, hasAuthToken, validateAuthSession } from 'utils/auth';
 
 export default function GuestRoute({ children }) {
-  if (hasAuthToken()) {
-    return <Navigate to="/dashboard" replace />;
+  if (hasAuthToken() && validateAuthSession()) {
+    return <Navigate to={getDefaultRouteForRole(getAuthUserRole())} replace />;
   }
 
   return children || <Outlet />;

@@ -2,7 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
 
 import { db } from 'pwa/db';
-import { flushSyncQueue, SYNC_QUEUE_STATUS_FAILED, SYNC_QUEUE_STATUS_PENDING } from 'pwa/syncService';
+import {
+  getExistingPushSubscription,
+  getNotificationPermission,
+  isPushNotificationSupported,
+  subscribeToPushNotifications,
+  unsubscribeFromPushNotifications
+} from 'pwa/pushNotificationService';
+import {
+  flushSyncQueue,
+  resetTerminalSyncFailures,
+  SYNC_QUEUE_STATUS_FAILED,
+  SYNC_QUEUE_STATUS_PENDING,
+  SYNC_RESULT_STATUS_CONFLICT,
+  SYNC_RESULT_STATUS_EXHAUSTED,
+  SYNC_RESULT_STATUS_VALIDATION_FAILED
+} from 'pwa/syncService';
 import { useNetworkStatus } from 'pwa/useNetworkStatus';
 
 const POLL_INTERVAL_MS = 3000;
@@ -12,6 +27,13 @@ function formatTimestamp(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'N/A';
   return date.toLocaleString();
+}
+
+function permissionChipColor(permission) {
+  if (permission === 'granted') return 'success';
+  if (permission === 'denied') return 'error';
+  if (permission === 'default') return 'warning';
+  return 'default';
 }
 
 /**
@@ -24,18 +46,44 @@ export default function PatrolPwaStatusPanel({ patrolId, trackingActive }) {
   const [lastSavedTimestamp, setLastSavedTimestamp] = useState(null);
   const [pendingQueueCount, setPendingQueueCount] = useState(0);
   const [failedQueueCount, setFailedQueueCount] = useState(0);
+  const [validationFailedCount, setValidationFailedCount] = useState(0);
+  const [conflictCount, setConflictCount] = useState(0);
+  const [exhaustedCount, setExhaustedCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [errorText, setErrorText] = useState('');
+  const [notificationPermission, setNotificationPermission] = useState(() => getNotificationPermission());
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMessage, setPushMessage] = useState('');
+
+  const pushSupported = isPushNotificationSupported();
+
+  const refreshPushState = useCallback(async () => {
+    setNotificationPermission(getNotificationPermission());
+    if (!pushSupported) {
+      setPushSubscribed(false);
+      return;
+    }
+    try {
+      const subscription = await getExistingPushSubscription();
+      setPushSubscribed(Boolean(subscription));
+    } catch {
+      setPushSubscribed(false);
+    }
+  }, [pushSupported]);
 
   const loadPanelStats = useCallback(async () => {
     try {
-      const [pendingCount, failedCount] = await Promise.all([
+      const [pendingCount, failedRows] = await Promise.all([
         db.sync_queue.where('status').equals(SYNC_QUEUE_STATUS_PENDING).count(),
-        db.sync_queue.where('status').equals(SYNC_QUEUE_STATUS_FAILED).count()
+        db.sync_queue.where('status').equals(SYNC_QUEUE_STATUS_FAILED).toArray()
       ]);
 
       setPendingQueueCount(pendingCount);
-      setFailedQueueCount(failedCount);
+      setFailedQueueCount(failedRows.length);
+      setValidationFailedCount(failedRows.filter((row) => row.resultStatus === SYNC_RESULT_STATUS_VALIDATION_FAILED).length);
+      setConflictCount(failedRows.filter((row) => row.resultStatus === SYNC_RESULT_STATUS_CONFLICT).length);
+      setExhaustedCount(failedRows.filter((row) => row.resultStatus === SYNC_RESULT_STATUS_EXHAUSTED).length);
 
       if (!patrolId) {
         setLocationLogCount(0);
@@ -65,6 +113,7 @@ export default function PatrolPwaStatusPanel({ patrolId, trackingActive }) {
     const tick = async () => {
       if (!active) return;
       await loadPanelStats();
+      await refreshPushState();
     };
 
     void tick();
@@ -76,12 +125,13 @@ export default function PatrolPwaStatusPanel({ patrolId, trackingActive }) {
       active = false;
       clearInterval(timerId);
     };
-  }, [loadPanelStats]);
+  }, [loadPanelStats, refreshPushState]);
 
   const handleRetrySync = async () => {
     try {
       setSyncing(true);
       setErrorText('');
+      await resetTerminalSyncFailures();
       await flushSyncQueue();
       await loadPanelStats();
     } catch (error) {
@@ -91,7 +141,43 @@ export default function PatrolPwaStatusPanel({ patrolId, trackingActive }) {
     }
   };
 
+  const handleEnableNotifications = async () => {
+    try {
+      setPushBusy(true);
+      setPushMessage('');
+      await subscribeToPushNotifications();
+      await refreshPushState();
+      setPushMessage('Push notifications enabled.');
+    } catch (error) {
+      setPushMessage(error?.message || 'Failed to enable notifications');
+      await refreshPushState();
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const handleDisableNotifications = async () => {
+    try {
+      setPushBusy(true);
+      setPushMessage('');
+      await unsubscribeFromPushNotifications();
+      await refreshPushState();
+      setPushMessage('Push notifications disabled.');
+    } catch (error) {
+      setPushMessage(error?.message || 'Failed to disable notifications');
+      await refreshPushState();
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
   const queueSummary = useMemo(() => pendingQueueCount + failedQueueCount, [pendingQueueCount, failedQueueCount]);
+
+  const needsSyncAttention =
+    failedQueueCount > 0 ||
+    validationFailedCount > 0 ||
+    conflictCount > 0 ||
+    exhaustedCount > 0;
 
   return (
     <Paper sx={{ p: 2, mt: 2 }}>
@@ -107,6 +193,12 @@ export default function PatrolPwaStatusPanel({ patrolId, trackingActive }) {
         <Chip label={trackingActive ? 'GPS Active' : 'GPS Inactive'} color={trackingActive ? 'success' : 'default'} size="small" />
         <Chip label={patrolId ? `Patrol #${patrolId}` : 'No Active Patrol'} color={patrolId ? 'primary' : 'default'} size="small" />
       </Stack>
+
+      {needsSyncAttention ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Some patrol logs require attention. Backend validation may be incomplete.
+        </Alert>
+      ) : null}
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
         <Typography variant="body2">Last saved location:</Typography>
@@ -128,6 +220,61 @@ export default function PatrolPwaStatusPanel({ patrolId, trackingActive }) {
         <Typography variant="body2" color="text.secondary">
           {failedQueueCount}
         </Typography>
+
+        <Typography variant="body2">Validation failed:</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {validationFailedCount}
+        </Typography>
+
+        <Typography variant="body2">Sync conflicts:</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {conflictCount}
+        </Typography>
+
+        <Typography variant="body2">Retries exhausted:</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {exhaustedCount}
+        </Typography>
+      </Box>
+
+      <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+          Push notifications
+        </Typography>
+
+        <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
+          <Chip label={`Permission: ${notificationPermission}`} color={permissionChipColor(notificationPermission)} size="small" />
+          {pushSupported ? (
+            <Chip label={pushSubscribed ? 'Subscribed' : 'Not subscribed'} color={pushSubscribed ? 'success' : 'default'} size="small" />
+          ) : (
+            <Chip label="Not supported" size="small" />
+          )}
+        </Stack>
+
+        <Stack direction="row" spacing={1} flexWrap="wrap">
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleEnableNotifications}
+            disabled={!pushSupported || pushBusy || pushSubscribed || notificationPermission === 'denied'}
+          >
+            Enable Notifications
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleDisableNotifications}
+            disabled={!pushSupported || pushBusy || !pushSubscribed}
+          >
+            Disable Notifications
+          </Button>
+        </Stack>
+
+        {pushMessage ? (
+          <Alert severity={pushMessage.includes('enabled') || pushMessage.includes('disabled') ? 'success' : 'warning'} sx={{ mt: 1.5 }}>
+            {pushMessage}
+          </Alert>
+        ) : null}
       </Box>
 
       {errorText ? (

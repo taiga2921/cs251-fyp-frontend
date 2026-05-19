@@ -74,4 +74,28 @@ export class PatrolRepository {
       throw error;
     }
   }
+
+  async getPatrolSummary(patrolSessionId) {
+    try {
+      if (!patrolSessionId) {
+        throw new Error('Patrol session id is required for summary');
+      }
+      return await this.dataSource.getPatrolSummary(patrolSessionId);
+    } catch (error) {
+      console.error('Error fetching patrol summary:', error);
+      throw error;
+    }
+  }
+
+  async validatePatrolSession(patrolSessionId) {
+    try {
+      if (!patrolSessionId) {
+        throw new Error('Patrol session id is required for validation');
+      }
+      return await this.dataSource.validatePatrolSession(patrolSessionId);
+    } catch (error) {
+      console.error('Error validating patrol session:', error);
+      throw error;
+    }
+  }
 }

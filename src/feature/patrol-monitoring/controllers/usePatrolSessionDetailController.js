@@ -1,0 +1,263 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import { emitPatrolRealtimeNotification } from 'services/realtime/patrolRealtimeNotifier';
+import { usePatrolRealtime } from 'services/realtime/usePatrolRealtime';
+import { handleSessionRealtimeEvent } from './patrolRealtimeHandlers';
+
+export const usePatrolSessionDetailController = (repository) => {
+  const { patrolSessionId } = useParams();
+  const navigate = useNavigate();
+
+  const [session, setSession] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [checkpointEvents, setCheckpointEvents] = useState([]);
+  const [patrolRoutes, setPatrolRoutes] = useState([]);
+  const [validationResult, setValidationResult] = useState(null);
+
+  const [loading, setLoading] = useState(true);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [routesLoading, setRoutesLoading] = useState(false);
+  const [validating, setValidating] = useState(false);
+
+  const [error, setError] = useState(null);
+  const [summaryError, setSummaryError] = useState(null);
+  const [routesError, setRoutesError] = useState(null);
+  const [validationError, setValidationError] = useState(null);
+  const [validationMessage, setValidationMessage] = useState(null);
+
+  const routeBatchRef = useRef([]);
+  const routeBatchTimerRef = useRef(null);
+  const largeGapNotifiedRef = useRef(false);
+
+  const flushRouteBatch = useCallback(() => {
+    if (!routeBatchRef.current.length) {
+      return;
+    }
+    const batch = [...routeBatchRef.current];
+    routeBatchRef.current = [];
+
+    setPatrolRoutes((prev) => {
+      const merged = [...prev];
+      batch.forEach((point) => {
+        const exists = merged.some((row) => row.id === point.id);
+        if (!exists) {
+          merged.push(point);
+        }
+      });
+      return merged.sort((a, b) => {
+        const ta = a?.recorded_at ? new Date(a.recorded_at).getTime() : 0;
+        const tb = b?.recorded_at ? new Date(b.recorded_at).getTime() : 0;
+        return ta - tb;
+      });
+    });
+  }, []);
+
+  const queueRoutePoint = useCallback(
+    (point) => {
+      routeBatchRef.current.push(point);
+      if (routeBatchTimerRef.current) {
+        clearTimeout(routeBatchTimerRef.current);
+      }
+      routeBatchTimerRef.current = setTimeout(() => {
+        flushRouteBatch();
+      }, 300);
+    },
+    [flushRouteBatch]
+  );
+
+  const handleLargeGapDetected = useCallback((gapSeconds) => {
+    if (largeGapNotifiedRef.current) {
+      return;
+    }
+    largeGapNotifiedRef.current = true;
+    emitPatrolRealtimeNotification({
+      severity: 'warning',
+      message: `Large GPS gap detected (${gapSeconds}s).`
+    });
+  }, []);
+
+  const loadSummary = useCallback(async () => {
+    if (!patrolSessionId) return;
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const data = await repository.getPatrolSummary(patrolSessionId);
+      setSummary(data);
+    } catch (err) {
+      setSummary(null);
+      setSummaryError(err.message || 'Failed to load patrol summary');
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [repository, patrolSessionId]);
+
+  const loadPatrolRoutes = useCallback(async () => {
+    if (!patrolSessionId) return;
+    setRoutesLoading(true);
+    setRoutesError(null);
+    try {
+      const rows = await repository.getPatrolRoutes(patrolSessionId);
+      setPatrolRoutes(rows);
+    } catch (err) {
+      setPatrolRoutes([]);
+      setRoutesError(err.message || 'Failed to load patrol route data');
+    } finally {
+      setRoutesLoading(false);
+    }
+  }, [repository, patrolSessionId]);
+
+  const loadCheckpointEvents = useCallback(async () => {
+    if (!patrolSessionId) return;
+    setEventsLoading(true);
+    try {
+      const { rows } = await repository.getCheckpointEvents({
+        patrol_session_id: patrolSessionId,
+        per_page: 100,
+        page: 1,
+        sort: 'latest'
+      });
+      setCheckpointEvents(rows);
+    } catch (err) {
+      console.error('[patrol-monitoring] failed to load checkpoint events', err);
+      setCheckpointEvents([]);
+    } finally {
+      setEventsLoading(false);
+    }
+  }, [repository, patrolSessionId]);
+
+  const loadSession = useCallback(async () => {
+    if (!patrolSessionId) {
+      setError('Patrol session id is missing');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await repository.getPatrolSessionById(patrolSessionId);
+      setSession(data);
+    } catch (err) {
+      setSession(null);
+      setError(err.message || 'Failed to load patrol session');
+    } finally {
+      setLoading(false);
+    }
+  }, [repository, patrolSessionId]);
+
+  const loadAll = useCallback(async () => {
+    await loadSession();
+    await Promise.all([loadSummary(), loadCheckpointEvents(), loadPatrolRoutes()]);
+  }, [loadSession, loadSummary, loadCheckpointEvents, loadPatrolRoutes]);
+
+  useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
+
+  useEffect(
+    () => () => {
+      if (routeBatchTimerRef.current) {
+        clearTimeout(routeBatchTimerRef.current);
+      }
+    },
+    []
+  );
+
+  const loadSummaryRef = useRef(loadSummary);
+  const loadCheckpointEventsRef = useRef(loadCheckpointEvents);
+  useEffect(() => {
+    loadSummaryRef.current = loadSummary;
+    loadCheckpointEventsRef.current = loadCheckpointEvents;
+  }, [loadSummary, loadCheckpointEvents]);
+
+  const handleRealtimeEvent = useCallback(
+    ({ name, payload }) => {
+      handleSessionRealtimeEvent(
+        { name, payload },
+        patrolSessionId,
+        {
+          setSession,
+          setPatrolRoutes,
+          setCheckpointEvents,
+          setValidationResult,
+          setSummary,
+          loadSummary: () => loadSummaryRef.current(),
+          loadCheckpointEvents: () => loadCheckpointEventsRef.current(),
+          queueRoutePoint
+        }
+      );
+    },
+    [patrolSessionId, queueRoutePoint]
+  );
+
+  const { isConnected, connectionState, isRealtimeEnabled } = usePatrolRealtime({
+    patrolSessionId,
+    onEvent: handleRealtimeEvent
+  });
+
+  useEffect(() => {
+    if (isConnected) {
+      return undefined;
+    }
+    const intervalId = setInterval(() => {
+      void loadSession();
+      void loadSummaryRef.current();
+      void loadCheckpointEventsRef.current();
+      void loadPatrolRoutes();
+    }, 30000);
+    return () => clearInterval(intervalId);
+  }, [isConnected, loadSession, loadPatrolRoutes]);
+
+  const handleReRunValidation = async () => {
+    if (!patrolSessionId || validating) return;
+
+    try {
+      setValidating(true);
+      setValidationError(null);
+      setValidationMessage(null);
+
+      const result = await repository.validatePatrolSession(patrolSessionId);
+      setValidationResult(result);
+      setValidationMessage('Validation completed. Summary and checkpoint events refreshed.');
+
+      await Promise.all([loadSummary(), loadCheckpointEvents(), loadPatrolRoutes()]);
+    } catch (err) {
+      setValidationError(err.message || 'Re-run validation failed');
+      console.error('[patrol-monitoring] validation failed', err);
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleBack = () => {
+    navigate('/admin/patrol-monitoring');
+  };
+
+  return {
+    patrolSessionId,
+    session,
+    summary,
+    checkpointEvents,
+    patrolRoutes,
+    validationResult,
+    loading,
+    summaryLoading,
+    eventsLoading,
+    routesLoading,
+    validating,
+    error,
+    summaryError,
+    routesError,
+    validationError,
+    validationMessage,
+    handleReRunValidation,
+    handleBack,
+    handleRefresh: loadAll,
+    handleLargeGapDetected,
+    isConnected,
+    connectionState,
+    isRealtimeEnabled
+  };
+};

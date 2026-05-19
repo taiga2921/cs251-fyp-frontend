@@ -12,7 +12,8 @@ import MuiBreadcrumbs from '@mui/material/Breadcrumbs';
 import Box from '@mui/material/Box';
 
 // project imports
-import navigation from 'menu-items';
+import getMenuItemsForRole from 'menu-items/getMenuItemsForRole';
+import { getAuthUserRole } from 'utils/auth';
 
 // assets
 import { IconChevronRight, IconTallymark1 } from '@tabler/icons-react';
@@ -50,6 +51,7 @@ export default function Breadcrumbs({
 }) {
   const theme = useTheme();
   const location = useLocation();
+  const navigation = getMenuItemsForRole(getAuthUserRole());
   const [main, setMain] = useState();
   const [item, setItem] = useState();
 

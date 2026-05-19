@@ -39,30 +39,35 @@ The frontend currently provides:
 - Sample dashboard widgets (charts, cards) inherited from the Berry template.
 - Theme customization (light scheme + CSS variables) with font family / border radius adjustments persisted to `localStorage`.
 - **Progressive Web App (PWA)** support via `vite-plugin-pwa` (service worker precache, web app manifest, optional **Install App** UI in the sidebar when the browser fires `beforeinstallprompt`).
-- **PWA client layer (`src/pwa/`)** — offline-aware UX (`NetworkSnackbar`), Dexie **IndexedDB** for patrol location logs and a **sync queue**, a **`flushSyncQueue`** sync engine posting to `POST /api/pwa/sync`, and shared **`useNetworkStatus`** (browser online/offline events).
-- **Patrol module (`feature/patrol`)** — single guard page **`views/PartrolHome.jsx`** + **`usePatrolController`**: creates Laravel **`patrol_sessions`** and **`checkpoint-events`** placeholders, posts GPS breadcrumbs to **`POST /patrol-routes`**, and drives live GPS only via **`feature/patrol/services/geolocationService`** ( **`saveLocationLog`** → Dexie + **`sync_queue`**). **`components/PatrolTracking.jsx`** is presentational (no watch lifecycle); **`components/PatrolPwaStatusPanel.jsx`** shows online/offline, tracking chip, Dexie counts, sync-queue pending/failed, and **Retry Sync** (**`flushSyncQueue`**). Raw **`navigator.geolocation`** is not used from the controller; primitives live in **`pwa/geolocationService`**.
+- **PWA client layer (`src/pwa/`)** — offline-aware UX (`NetworkSnackbar`), Dexie **IndexedDB** for patrol location logs and a **sync queue**, a **`flushSyncQueue`** sync engine posting to `POST /api/pwa/sync`, **Background Sync** (tag **`pwa-sync-queue`**: SW notifies clients → app-thread flush; falls back to **`online`** + **Retry Sync** when unsupported), **`pushNotificationService`** (Web Push subscribe/unsubscribe → `POST /api/push-subscriptions`), and shared **`useNetworkStatus`** (browser online/offline events). Custom SW handlers: **`public/push-handlers.js`** (push + **`sync`**) loaded via Workbox **`importScripts`** (keeps **`generateSW`**).
+- **Patrol module (`feature/patrol`)** — single guard page **`views/PartrolHome.jsx`** + **`usePatrolController`**: creates Laravel **`patrol_sessions`** and **`checkpoint-events`** placeholders, posts GPS breadcrumbs to **`POST /patrol-routes`**, and drives live GPS only via **`feature/patrol/services/geolocationService`** ( **`saveLocationLog`** → Dexie + **`sync_queue`**). **Stop Patrol** runs: flush PWA sync → **`POST /patrol-sessions/{id}/validate`** (when online) → **`GET /patrol-sessions/{id}/summary`**; results in **`PatrolSummaryCard.jsx`** (backend validation section + final summary). Live geofence PATCH confidence (80/65) remains **provisional** until backend validation. **`components/PatrolTracking.jsx`** is presentational; **`PatrolPwaStatusPanel.jsx`** shows sync/GPS telemetry and sync-queue warnings. Raw **`navigator.geolocation`** is not used from the controller.
 
 ### Core Functionality
 
 | Area | Status | Notes |
 |------|--------|-------|
 | Login (JWT) | Implemented | `views/pages/auth-forms/AuthLogin.jsx`, persists token via `utils/auth.js`. |
-| Logout | **Not implemented** | A “Logout” menu item exists in `Header/ProfileSection`, but it does **not** call any handler. |
+| Logout | Implemented | Profile menu → `useAuthController.handleLogout()` → `POST /auth/logout`, `clearAuthSession()`, Reverb disconnect, `navigate('/login')`. |
 | Register | **UI-only** | `AuthRegister.jsx` is a static form; no API call is wired. |
 | Dashboard | Implemented (template) | Demo charts & cards. |
 | User Management — list | Implemented | `feature/management-user/views/UserList.jsx`. |
 | User Management — view | Implemented | `feature/management-user/views/UserView.jsx`. |
 | User Management — add/edit | **Code present but routes disabled** | Components import non-existent files (`ui-component/FieldContainer`, `SuccessDialog`, etc.) and routes are commented out in `MainRoutes.jsx`. |
-| Zone / Camera / Checkpoint management | **Partially implemented** | Zone module includes service/repository/controller/view files and calls backend `/zones`; the **guard patrol** module uses `/checkpoints`, Laravel **`/checkpoint-events`** (via `patrolService`), and **`/patrol-sessions`**. Dedicated management-checkpoint UI exists separately. |
+| Zone management | **Implemented** | `feature/management-zone` — CRUD at `/admin/management-zone`; zone detail embeds checkpoint list for that zone. |
+| Checkpoint management | **Implemented** | `feature/management-checkpoint` — full admin CRUD at `/admin/management-checkpoint` with map picker, filters, server pagination. **Admin only** (menu + routes). |
+| Camera management | **Partially implemented** | Menu item exists; dedicated UI not complete. |
 | Patrol (guard) | **Implemented (functional)** | `feature/patrol` — Laravel **`patrol_sessions.id`** is end-to-end **`patrolId`** (Dexie **`location_logs.patrolId`** and **`POST /pwa/sync`** payload **`patrolId`** match); checkpoints via **`checkpoint-events`**; route crumbs via **`POST /patrol-routes`**; GPS only **`usePatrolController`** + **`services/geolocationService`**; **`PatrolPwaStatusPanel`**. See [Section 15](#15-progressive-web-app-pwa). |
-| PWA offline / sync | **Partially implemented** | IndexedDB + sync queue + global **`NetworkSnackbar`**; with Laravel **`backend-laravel-v1`**, **`POST /api/pwa/sync`** (**JWT**) drains **`location_log`** rows idempotently. Retry Sync + auto-flush on **`online`**. No WebSocket / Background Sync / push yet. |
+| Patrol Monitoring (admin) | **Implemented** | `feature/patrol-monitoring` — dashboard + session detail at **`/admin/patrol-monitoring`**; lists patrol sessions, summaries, checkpoint events, **route map** (Leaflet CDN); **live updates** via Laravel Reverb + Echo (30s polling fallback); **Re-run Validation** calls backend **`POST …/validate`**. |
+| PWA offline / sync | **Implemented (core)** | IndexedDB + sync queue + global **`NetworkSnackbar`**; **`POST /api/pwa/sync`** (**JWT**) drains **`location_log`** rows idempotently. **Background Sync** registers tag **`pwa-sync-queue`** when the queue has work; SW **`sync`** posts **`PWA_SYNC_REQUEST`** to clients → **`flushSyncQueue`**. **Retry Sync** + auto-flush on **`online`** remain when Background Sync is unavailable. Web Push subscribe/unsubscribe is implemented. Admin patrol monitoring uses **Reverb WebSockets** (separate from PWA). |
 | Theme Customization | Implemented | Font family + border radius drawer (toggle button itself is currently commented out). |
 | Notifications | UI-only | Static demo data. |
 
 ### Main Modules / Features (as found in `src/`)
 
 - `feature/management-user` — primary CRUD reference module.
+- `feature/management-checkpoint` — admin checkpoint CRUD with Leaflet map picker.
 - `feature/patrol` — guard patrol session UI + **`usePatrolController`** + Laravel patrol/checkpoint/route APIs + patrol geolocation service.
+- `feature/patrol-monitoring` — admin/operator patrol surveillance dashboard (session list, detail, re-validation).
 - `pwa/` — Dexie IndexedDB, offline sync queue flush, network hook, browser geolocation primitives.
 - `views/dashboard/Default` — demo dashboard.
 - `views/pages/authentication` — Login + Register pages.
@@ -112,6 +117,7 @@ See [Section 11](#11-dependencies) for the full table.
 The frontend talks to the Laravel API in `backend-laravel-v1`. The relationship is:
 
 - **Base URL:** `import.meta.env.VITE_API_BASE_URL` (default `http://localhost:8000/api`).
+- **Web Push VAPID public key:** `import.meta.env.VITE_VAPID_PUBLIC_KEY` (URL-safe base64; required for **Enable Notifications** in `PatrolPwaStatusPanel`).
 - **Auth scheme:** JWT bearer token (`Authorization: Bearer <token>`); token saved in `localStorage` under key `access_token`.
 - **Endpoints actually called from the frontend (non-exhaustive; see [Section 5](#5-api-integration)):**
   - `POST /login` (with fallback to `POST /auth/login` on 404) — login.
@@ -189,7 +195,7 @@ This keeps views purely presentational while controllers own state, side effects
 
 ### Feature-Based Structure
 
-`src/feature/` contains one folder per business domain. `management-user` is the most complete module; `management-zone` now has active data/service wiring, while `authentication`, `management-camera`, and `management-checkpoint` are still partially implemented.
+`src/feature/` contains one folder per business domain. `management-user` is the most complete module; `management-zone` now has active data/service wiring; `feature/authentication` provides logout (service/repository/controller); `management-checkpoint` is fully implemented (Milestone 8); `management-camera` remains partial.
 
 ### State Management Flow
 
@@ -372,7 +378,7 @@ feature/management-user/
     └── UserEdit.jsx                 # Imports unresolved components — see Section 13
 ```
 
-The other feature folders (`authentication/`, `management-camera/`, `management-checkpoint/`) vary in completeness; `management-zone/` includes service/repository/controller/view files.
+The other feature folders vary in completeness. **`feature/authentication/`** — `datasources/authService.js` (`POST /auth/logout`), `repositories/authRepository.js`, `controllers/useAuthController.js` (`handleLogout`, cross-tab `storage` sync). Login UI remains in `views/pages/auth-forms/AuthLogin.jsx`. **`management-zone/`** — zone CRUD. **`management-checkpoint/`** — checkpoint CRUD (see [Checkpoint management](#checkpoint-management-milestone-8)). **`management-camera/`** — partial.
 
 **Patrol (`feature/patrol/`):** `views/PartrolHome.jsx` (sole patrol UI), `controllers/usePatrolController.js`, `repositories/patrolRepository.js`, `datasources/patrolService.js` ( **`/patrol-sessions`**, **`/checkpoint-events`**, **`/patrol-routes`** ), `services/geolocationService.js` (domain GPS — **`pwa/locationLogService`** + **`pwa/geolocationService`**), presentational `components/PatrolTracking.jsx`, and **`components/PatrolPwaStatusPanel.jsx`** (Dexie + sync-queue telemetry, 3s polling; **no** GPS start/stop). **Patrol ID contract:** Dexie **`patrolId`** and PWA sync **`patrolId`** must equal Laravel **`patrol_sessions.id`** (not legacy **`patrol-logs`**). GPS is orchestrated only from **`usePatrolController`** via **`startPatrolTracking`**, **`stopPatrolTracking`**, and **`capturePatrolLocationSnapshot`** in `services/geolocationService.js`. **`GET /zones`** for the guard zone dropdown is normalized in **`patrolService`** / **`PatrolRepository`** to an **array of zones** (see [Patrol zone list (`GET /zones`)](#patrol-zone-list-get-zones)); **`PartrolHome`** keeps a stable **`PatrolRepository`** instance via **`useRef`** so zone loading does not refetch in a loop.
 
@@ -380,9 +386,10 @@ The other feature folders (`authentication/`, `management-camera/`, `management-
 
 | File | Purpose |
 |------|---------|
-| `db.js` | Dexie database **`PatrolPWA`** (versions 1–3): stores **`location_logs`**, **`sync_queue`** (with `payload`, `retryCount`, `lastAttempt`), **`patrol_sessions`**, **`notifications`**. |
+| `db.js` | Dexie database **`PatrolPWA`** (versions 1–4): stores **`location_logs`**, **`sync_queue`** (`payload`, `retryCount`, `lastAttempt`, **`resultStatus`**, **`errorMessage`**), **`patrol_sessions`**, **`notifications`**. |
 | `locationLogService.js` | **`saveLocationLog`** — UUID id, lat/lng/accuracy/source/trackingState/speed/heading/timestamp/syncStatus; enqueues matching **`sync_queue`** payload for `/pwa/sync`. Exports **`LOCATION_SOURCE`**, **`TRACKING_STATE`**, sync constants. |
-| `syncService.js` | **`flushSyncQueue`** — serial flush: pending/failed queue rows → status **`syncing`** → **`POST /pwa/sync`** with payload → **`synced`** or **`failed`** (+ retryCount/lastAttempt); updates **`location_logs.syncStatus`** when type is `location_log`. Guarded against concurrent flushes. |
+| `backgroundSyncService.js` | **`registerPwaSyncQueueBackgroundSync`** — registers Background Sync tag **`pwa-sync-queue`** when **`SyncManager`** is available (`navigator.serviceWorker.ready` → **`registration.sync.register`**). |
+| `syncService.js` | **`flushSyncQueue`** — serial flush with classified outcomes: **`resultStatus`** = `synced`, `duplicate_synced`, `validation_failed`, `conflict`, `failed`, `exhausted` (after **`MAX_SYNC_RETRY_COUNT`** = 5). Terminal rows are skipped on auto-retry; **Retry Sync** calls **`resetTerminalSyncFailures()`** first. Stores **`errorMessage`** on failures. Updates **`location_logs.syncStatus`** on success/duplicate. |
 | `useNetworkStatus.js` | React hook: **`navigator.onLine`** + **`online`**/**`offline`** events; on **`online`** calls **`flushSyncQueue()`** (errors contained). |
 | `geolocationService.js` | **Browser-only** helpers: **`getCurrentPosition`**, **`watchPosition`**, **`clearWatch`**, **`normalizeGeolocationError`**, **`DEFAULT_GEOLOCATION_OPTIONS`**. No IndexedDB. |
 
@@ -536,7 +543,7 @@ const router = createBrowserRouter(
 
 ### Public (Guest) Routes
 
-Defined in `src/routes/AuthenticationRoutes.jsx`. Wrapped in `GuestRoute` — authenticated users are redirected to `/dashboard`.
+Defined in `src/routes/AuthenticationRoutes.jsx`. Wrapped in `GuestRoute` — authenticated users are redirected to their **role default route** (see [Role-based access](#role-based-access-milestone-6)).
 
 | Path | Component | Layout | Purpose |
 |------|-----------|--------|---------|
@@ -550,11 +557,23 @@ Defined in `src/routes/MainRoutes.jsx`. Wrapped in `ProtectedRoute` — unauthen
 
 | Path | Component | Layout | Purpose |
 |------|-----------|--------|---------|
-| `/` | _redirect_ | `MainLayout` | `<Navigate to="/dashboard" replace />`. |
-| `/dashboard` | `views/dashboard/Default` | `MainLayout` | Default dashboard. |
-| `/dashboard/default` | `views/dashboard/Default` | `MainLayout` | Same as above (kept for menu compatibility). |
-| `/admin/management-user` | `feature/management-user/views/UserList` | `MainLayout` | User Management list. |
-| `/admin/management-user/view/:userId` | `feature/management-user/views/UserView` | `MainLayout` | User detail page. |
+| `/` | `RoleHomeRedirect` | `MainLayout` | Role-based home redirect. |
+| `/forbidden` | `views/errors/Forbidden` | `MainLayout` | 403 page with link to role home. |
+| `/dashboard` | `views/dashboard/Default` | `MainLayout` | **Admin only** (`RoleProtectedRoute`). |
+| `/dashboard/default` | `views/dashboard/Default` | `MainLayout` | **Admin only** (menu compatibility). |
+| `/patrol` | `feature/patrol/views/PartrolHome` | `MainLayout` | **Guard only** — guard patrol PWA page. |
+| `/guard/patrol` | _redirect_ | `MainLayout` | `<Navigate to="/patrol" replace />` (legacy). |
+| `/admin/management-user` | `feature/management-user/views/UserList` | `MainLayout` | **Admin only** — user list. |
+| `/admin/management-user/view/:userId` | `feature/management-user/views/UserView` | `MainLayout` | **Admin only**. |
+| `/admin/management-zone` | `feature/management-zone/views/ZoneList` | `MainLayout` | **Admin only**. |
+| `/admin/management-checkpoint` | `CheckpointList` | `MainLayout` | **Admin only** — checkpoint list (search, filters, pagination). |
+| `/admin/management-checkpoint/create` | `CheckpointCreate` | `MainLayout` | **Admin only** — create with map picker. |
+| `/admin/management-checkpoint/:checkpointId` | `CheckpointView` | `MainLayout` | **Admin only** — detail + read-only map. |
+| `/admin/management-checkpoint/:checkpointId/edit` | `CheckpointEdit` | `MainLayout` | **Admin only** — edit all fields. |
+| `/admin/management-zone/view/:zoneId` | `CheckpointList` (zone-scoped) | `MainLayout` | **Admin only** — checkpoints filtered to one zone. |
+| `/admin/patrol-monitoring` | `PatrolMonitoringDashboard` | `MainLayout` | **Admin + Security Operator**. |
+| `/admin/patrol-monitoring/:patrolSessionId` | `PatrolSessionDetail` | `MainLayout` | **Admin + Security Operator**. |
+| `/operator/patrol/*` | operator patrol views | `MainLayout` | **Admin only** (legacy operator module). |
 | `/typography` | `views/utilities/Typography` | `MainLayout` | Typography showcase. |
 | `/color` | `views/utilities/Color` | `MainLayout` | Color showcase. |
 | `/shadow` | `views/utilities/Shadow` | `MainLayout` | Shadow showcase. |
@@ -562,64 +581,67 @@ Defined in `src/routes/MainRoutes.jsx`. Wrapped in `ProtectedRoute` — unauthen
 
 ### Admin Routes
 
-The application currently has a single admin namespace (`/admin/*`) under `MainRoutes`. There is no separate admin layout or role check — access is gated only by JWT presence.
+Admin namespace routes under `/admin/*` use **`RoleProtectedRoute`** (JWT + role). Management routes are **Admin-only**; patrol monitoring is **Admin + Security Operator**.
 
-| Path | Component | Notes |
-|------|-----------|-------|
-| `/admin/management-user` | `UserList` | Active route. |
-| `/admin/management-user/view/:userId` | `UserView` | Active route. |
-| `/admin/management-user/add` | `UserAdd` | **Disabled** (route is commented out in `MainRoutes.jsx`). |
-| `/admin/management-user/edit/:userId` | `UserEdit` | **Disabled** (route is commented out in `MainRoutes.jsx`). |
+| Path | Component | Allowed roles |
+|------|-----------|---------------|
+| `/admin/management-user` (+ view/add/edit) | User management | Admin |
+| `/admin/management-zone` (+ add/edit) | Zone management | Admin |
+| `/admin/management-zone/view/:zoneId` | Zone detail + embedded checkpoint list | Admin |
+| `/admin/management-checkpoint` (+ create, view, edit) | Checkpoint management | Admin |
+| `/admin/patrol-monitoring` | `PatrolMonitoringDashboard` | Admin, Security Operator |
+| `/admin/patrol-monitoring/:patrolSessionId` | `PatrolSessionDetail` | Admin, Security Operator |
 
-### Staff / Customer Routes
+### Role-based access (Milestone 6)
 
-Unable to determine from current implementation. No staff-specific or customer-specific route groups exist in the codebase.
+Seeded backend roles: **Admin**, **Security Operator**, **Guard**.
+
+| Role | Routes | Sidebar menu (`getMenuItemsForRole`) | Default home |
+|------|--------|--------------------------------------|--------------|
+| **Admin** | Dashboard, all `/admin/*` management, patrol monitoring, operator module | Dashboard + Admin → Management (User, Zone, **Checkpoint**, Camera, Patrol Monitoring) | `/dashboard` |
+| **Security Operator** | `/admin/patrol-monitoring` (+ session detail) only | Patrol Monitoring | `/admin/patrol-monitoring` |
+| **Guard** | `/patrol` only | Guard → Patrol | `/patrol` |
+
+**Utilities:** `src/utils/auth.js` — `getAuthUser()`, `getAuthUserRole()`, `hasRole()`, `hasAnyRole()`, `getDefaultRouteForRole()`, `validateAuthSession()`, `clearAuthSession()` (clears `access_token` + `auth_user`).
+
+**Role resolution** supports `auth_user.role.name`, `auth_user.role` (string), and `auth_user.role_name`.
+
+**Invalid session:** token without parseable `auth_user` → `clearAuthSession()` → `/login`.
 
 ### Route Guards
 
-Both guards live in `src/routes/guards/`.
+Guards live in `src/routes/guards/`.
 
 #### `ProtectedRoute`
 
-```7:14:src/routes/guards/ProtectedRoute.jsx
-export default function ProtectedRoute({ children }) {
-  const location = useLocation();
+Wraps `MainLayout` — requires valid JWT **and** `auth_user` in `localStorage` (`validateAuthSession()`).
 
-  if (!hasAuthToken()) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
-  }
+#### `RoleProtectedRoute`
 
-  return children || <Outlet />;
-}
-```
+Props: `allowedRoles` (array), `children`.
 
-- Reads token presence via `utils/auth#hasAuthToken()`.
-- Redirects to `/login` and stores the originally requested location in `state.from`.
-- Note: the saved `state.from` is **not yet consumed** anywhere (the login flow always navigates to `/dashboard`).
+- No token → `/login`
+- Token without `auth_user` → `clearAuthSession()` → `/login`
+- Role not in `allowedRoles` → `/forbidden`
+
+#### `RoleHomeRedirect`
+
+`/` index route — sends authenticated users to `getDefaultRouteForRole()`.
 
 #### `GuestRoute`
 
-```6:12:src/routes/guards/GuestRoute.jsx
-export default function GuestRoute({ children }) {
-  if (hasAuthToken()) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return children || <Outlet />;
-}
-```
-
-- If a token exists, the user is bounced to `/dashboard`.
+Authenticated visitors → role default route (not always `/dashboard`).
 
 ### Redirect Behavior Summary
 
 | Trigger | Result |
 |---------|--------|
 | `/` (no token) | `ProtectedRoute` → `/login`. |
-| `/` (with token) | `MainRoutes` index → `/dashboard`. |
-| `/login` (with token) | `GuestRoute` → `/dashboard`. |
+| `/` (with token) | `RoleHomeRedirect` → role default. |
+| `/login` (with token) | `GuestRoute` → role default. |
+| Wrong role for route | `RoleProtectedRoute` → `/forbidden`. |
 | `/pages/login` | Always redirected to `/login`. |
-| API responds `401` | `clearAuthToken()` + `window.location.replace('/login')`. |
+| API responds `401` | `clearAuthSession()` + `window.location.replace('/login')`. |
 
 ### Unauthorized / Error Handling
 
@@ -713,7 +735,9 @@ Like `userService`, `zoneService` maps `401` and `403` to user-friendly service 
 | `updatePatrol` | `PUT /patrol-sessions/{id}` | Maps `time_end` → **`ended_at`**, lifecycle **`status`** → Laravel enums (`in_progress` → **`active`**, **`cancelled`** → **`aborted`**). |
 | `getAllCheckpointsByZoneId` | `GET /checkpoints?zone_id={id}` | Checkpoints for the selected zone. |
 | `createCheckpointLog` | `POST /checkpoint-events` | Placeholder rows **`pending`** (`patrol_session_id`, `checkpoint_id`). Response normalized to pseudo checkpoint-log shape for UI. |
-| `updateCheckpointLog` | `PATCH /checkpoint-events/{id}` | Marks **`verified`** + **`detected_at`** when reached (server has no lat/lng columns on `checkpoint_events` yet). |
+| `updateCheckpointLog` | `PATCH /checkpoint-events/{id}` | **Provisional** during patrol: continuous geofence sends **`verified`**, **`detected_at`**, **`detection_type: continuous`**, **`confidence_score: 80`**; resume sends **`detection_type: resume`**, **`confidence_score: 65`**, **`verified`** or **`uncertain`**. Authoritative scores come from backend validation (see **`validatePatrolSession`**). |
+| `validatePatrolSession` | `POST /patrol-sessions/{id}/validate` | Called from **`usePatrolController.completePatrol`** after **`flushSyncQueue()`** when online. Returns validation payload (`checkpoint_results`, gaps, anomalies). Backend is source of truth. |
+| `getPatrolSummary` | `GET /patrol-sessions/{id}/summary` | Fetched **after** backend validation during stop patrol. |
 | `createPatrolRoute` | `POST /patrol-routes` | GPS breadcrumbs (`patrol_session_id`, lat/lng, optional accuracy / altitude / `timestamp` ms). |
 
 #### Patrol zone list (`GET /zones`)
@@ -776,6 +800,17 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 | `patrolService.createCheckpointLog` | `POST` | `/checkpoint-events` |
 | `patrolService.updateCheckpointLog` | `PATCH` | `/checkpoint-events/{logId}` |
 | `patrolService.createPatrolRoute` | `POST` | `/patrol-routes` |
+| `patrolService.getPatrolSummary` | `GET` | `/patrol-sessions/{id}/summary` |
+| `patrolService.validatePatrolSession` | `POST` | `/patrol-sessions/{id}/validate` — authoritative checkpoint validation (Milestone 2 wired on stop patrol) |
+| `patrolMonitoringService.getPatrolSessions` | `GET` | `/patrol-sessions` — admin dashboard list (pagination, `status`, `zone_id`) |
+| `patrolMonitoringService.getPatrolSessionById` | `GET` | `/patrol-sessions/{id}` |
+| `patrolMonitoringService.getPatrolSummary` | `GET` | `/patrol-sessions/{id}/summary` |
+| `patrolMonitoringService.validatePatrolSession` | `POST` | `/patrol-sessions/{id}/validate` — **Re-run Validation** on detail page |
+| `patrolMonitoringService.getCheckpointEvents` | `GET` | `/checkpoint-events?patrol_session_id={id}` |
+| `patrolMonitoringService.getPatrolRoutes` | `GET` | `/patrol-routes?patrol_session_id={id}` — route breadcrumbs for map (paginated; repository merges pages) |
+| `broadcastService` (Echo) | `POST` | `/broadcasting/auth` — JWT private channel auth (Reverb WebSocket) |
+| `pushNotificationService` (subscribe) | `POST` | `/push-subscriptions` |
+| `pushNotificationService` (unsubscribe) | `DELETE` | `/push-subscriptions/{id}` |
 | `syncService.flushSyncQueue` | `POST` | `/pwa/sync` |
 
 ### Frontend ↔ Laravel Communication
@@ -823,10 +858,25 @@ If the error status is `401`, the password input is cleared.
 
 ### Logout Flow
 
-Unable to determine from current implementation — there is **no logout handler** wired in the UI.
+Implemented end-to-end from the header Profile menu using the same layered pattern as other features (view → controller → repository → service).
 
-- The Profile menu (`layout/MainLayout/Header/ProfileSection/index.jsx`) renders a static "Logout" `ListItemButton`, but it has no `onClick` handler that calls `clearAuthToken()` or invalidates the backend session.
-- A logout endpoint exists on the backend (`POST /auth/logout`), but it is not yet called from the frontend.
+**Entry point:** `layout/MainLayout/Header/ProfileSection/index.jsx` — the "Logout" `ListItemButton` calls `handleLogout()` from `useAuthController`. While `logoutLoading` is true, the button is disabled and the label reads **Logging out...**. A small `logoutError` caption appears only when the backend was unreachable (non-`401` HTTP errors or network failure); the user is still signed out locally.
+
+**`handleLogout()` sequence** (`feature/authentication/controllers/useAuthController.js`):
+
+1. Guard against duplicate clicks (`logoutInProgress` ref + `logoutLoading`).
+2. `POST /auth/logout` via `authRepository` → `authService` → `api.post`.
+3. **`finally` (always runs):**
+   - `broadcastService.disconnect()` — leaves Reverb channels and tears down the Echo singleton (`services/realtime/broadcastService.js`).
+   - `clearAuthSession()` — removes `access_token` and `auth_user` from `localStorage` (does **not** touch Dexie / PWA `sync_queue`).
+   - `setCurrentUser(null)`.
+   - `navigate('/login', { replace: true })`.
+
+**Backend failure tolerance:** If logout returns `401` (expired token), the global `api.js` handler may clear the session and redirect before `finally` completes; `finally` still runs disconnect + `clearAuthSession()` + navigation. Network errors and other non-`401` failures skip showing an error for `401`; optional `logoutError` is set for offline/server issues only.
+
+**Cross-tab:** `useAuthController` listens for `storage` events on `access_token` / `auth_user`. When another tab clears the token, this tab disconnects realtime and navigates to `/login` (SPA navigation, not a full reload).
+
+**IndexedDB / PWA:** Patrol offline logs and the sync queue are intentionally preserved after logout so guards can finish syncing when they sign in again.
 
 ### Registration Flow
 
@@ -843,7 +893,7 @@ The Register page (`/pages/register`) uses `AuthRegister.jsx`, which is a **pure
 | Storage backend | `localStorage` |
 | Token key | `access_token` (`utils/auth#AUTH_TOKEN_KEY`) |
 | User key | `auth_user` (set by `AuthLogin` after login) |
-| Helper API | `getAuthToken()`, `hasAuthToken()`, `setAuthToken(token)`, `clearAuthToken()` |
+| Helper API | `getAuthToken()`, `hasAuthToken()`, `setAuthToken()`, `clearAuthToken()`, `getAuthUser()`, `setAuthUser()`, `getAuthUserRole()`, `hasRole()`, `hasAnyRole()`, `getDefaultRouteForRole()`, `validateAuthSession()`, `clearAuthSession()` |
 
 Centralizing the key avoids duplicated `localStorage.getItem('access_token')` calls.
 
@@ -855,27 +905,31 @@ Unable to determine from current implementation — no refresh-token flow is imp
 
 See [Section 4](#4-routing-documentation). Implemented entirely client-side via:
 
-- `ProtectedRoute` (token must exist).
-- `GuestRoute` (token must NOT exist).
-- Global `401` handler in `api.js` (clears token + redirects).
+- `ProtectedRoute` (token + `auth_user` must exist).
+- `RoleProtectedRoute` (role must be in `allowedRoles`).
+- `GuestRoute` (unauthenticated only).
+- Global `401` handler in `api.js` (`clearAuthSession()` + redirect).
 
 ### Role-Based Rendering / Permission Handling
 
-Unable to determine from current implementation — there are no role-based components, no permission helpers, and no role check inside the route guards. The persisted `auth_user` object is **stored** but never **consumed** in the codebase outside being saved.
+- **Routes:** `RoleProtectedRoute` per route in `MainRoutes.jsx`.
+- **Menu:** `menu-items/getMenuItemsForRole.js` — sidebar and breadcrumbs use role-filtered items.
+- **Profile:** `ProfileSection` shows `auth_user.name` and `getAuthUserRole()`.
+- **Login:** `AuthLogin` navigates to `getDefaultRouteForRole()` after storing user + token.
 
-The `userService` does map a `403` response to `"Forbidden. Admin access is required."`, which is the only place where role/permission semantics surface in the frontend code.
+Backend login returns `data.user` with nested `role` (`UserResource` → `RoleResource.name`). Top-level `data.role` string is also present but the SPA reads from `auth_user`.
 
 ### Session Persistence
 
 - Page reloads keep the user logged in because `access_token` lives in `localStorage`.
-- There is no cross-tab synchronization (no `storage` event listeners).
+- **Cross-tab logout:** `useAuthController` listens for `storage` events on `access_token` / `auth_user`; when another tab clears the session, open tabs disconnect Reverb and `navigate('/login', { replace: true })`.
 - A "Keep me logged in" checkbox exists in the login form but is **not used** when storing the token.
 
 ### Redirect Handling After Login / Logout
 
-- After successful login: always `navigate('/dashboard', { replace: true })`. The `state.from` saved by `ProtectedRoute` is **not** consumed.
+- After successful login: `navigate(getDefaultRouteForRole(role), { replace: true })`. The `state.from` saved by `ProtectedRoute` is **not** consumed.
 - After `401`: `window.location.replace('/login')` (full page reload) unless already at `/login`.
-- After logout: Unable to determine from current implementation — no logout flow exists.
+- After logout: `navigate('/login', { replace: true })` from `handleLogout()` (Profile menu). Global `401` still uses `window.location.replace('/login')`.
 
 ---
 
@@ -1179,7 +1233,7 @@ The config file is **`vite.config.mjs`** (not `vite.config.js`). Plugins include
 | `resolve.alias` | `contexts/ConfigContext`, `config` → absolute paths under `src/` | Ensures one canonical module for context + default config. |
 | `resolve.alias` | `@tabler/icons-react` → ESM icons bundle | Smaller icon imports. |
 | `base` | `${env.VITE_APP_BASE_NAME}` | SPA public base path (from `.env`, often `/`). |
-| `plugins` | `jsconfigSrcBaseUrlFallback`, `react()`, `jsconfigPaths()`, `VitePWA({ … })` | PWA: `generateSW`, manifest, Workbox precache; `injectRegister: false` because registration uses `virtual:pwa-register` in `index.jsx`. |
+| `plugins` | `jsconfigSrcBaseUrlFallback`, `react()`, `jsconfigPaths()`, `VitePWA({ … })` | PWA: `generateSW`, manifest, Workbox precache + **`runtimeCaching`** from **`pwa/workbox-runtime-caching.mjs`**; `injectRegister: false` because registration uses `virtual:pwa-register` in `index.jsx`. |
 
 The **`jsconfigSrcBaseUrlFallback`** plugin resolves bare imports from `src/` when needed for Vite 7 production builds; it explicitly **skips** `react`, `react-dom`, and `scheduler` so those always resolve via normal node resolution.
 
@@ -1434,9 +1488,9 @@ So every create/update call would throw "...are required" before reaching the da
 
 `feature/management-user/datasources/userDataSource.js` is a hand-written mock dataset. It is **not imported by any view** today (`userService.js` is used instead). It is dead code.
 
-### Logout Is Not Implemented
+### ~~Logout Is Not Implemented~~ (resolved — Milestone 7)
 
-The "Logout" `ListItemButton` in `Header/ProfileSection/index.jsx` has no handler. Token clearing only happens implicitly on a `401`.
+Logout is wired through `useAuthController.handleLogout()` from `ProfileSection`. Token clearing also still occurs on global `401` in `api.js`.
 
 ### Register Form Is Visual-Only
 
@@ -1448,7 +1502,7 @@ The "Logout" `ListItemButton` in `Header/ProfileSection/index.jsx` has no handle
 
 ### Empty Feature Folders
 
-`feature/authentication`, `feature/management-camera`, and `feature/management-checkpoint` are still incomplete. Zone service wiring exists, but route/menu parity for all admin management screens should still be validated end-to-end.
+`feature/authentication` implements logout (login UI remains in `views/pages/auth-forms`); `feature/management-checkpoint` is complete (Milestone 8); `feature/management-camera` remains incomplete. Zone service wiring exists, but route/menu parity for all admin management screens should still be validated end-to-end.
 
 ### Patrol GPS singleton (`feature/patrol/services/geolocationService.js`)
 
@@ -1503,9 +1557,10 @@ Suggestions that are actionable given the current implementation.
 ### Feature Enhancements
 
 - **Complete the User Management module**: implement `UserAdd` / `UserEdit` properly by adding the missing `ui-component/FieldContainer`, `SelectFieldContainer`, `SectionHeader`, `CreateActionButtons` (`SubmitButton`), and `dialogs/SuccessDialog` components, then re-enable the commented-out routes in `MainRoutes.jsx`.
-- **Implement logout**: wire the Profile menu's "Logout" item to a handler that calls the backend `POST /auth/logout`, then `clearAuthToken()`, then `navigate('/login', { replace: true })`. Also remove `auth_user` from `localStorage`.
+- ~~**Implement logout**~~ — done (Milestone 7): Profile menu → `useAuthController.handleLogout()` → `POST /auth/logout`, `clearAuthSession()`, Reverb disconnect, `/login`.
 - **Implement Register**: convert `AuthRegister.jsx` from a static form into a controlled form that calls the backend register endpoint.
-- **Implement Zone / Camera / Checkpoint modules** under `feature/management-zone`, `feature/management-camera`, `feature/management-checkpoint`. Mirror the user-management pattern (views → controllers → repository → service).
+- ~~**Implement Checkpoint module**~~ — done (Milestone 8): `feature/management-checkpoint` with map picker and full CRUD.
+- **Implement Camera module** under `feature/management-camera`. Mirror the user-management pattern (views → controllers → repository → service).
 - **Show authenticated user info** in the header (currently hard-coded "Johne Doe" in `ProfileSection`). The token already saves a user object under `auth_user`.
 
 ### Refactoring Opportunities
@@ -1554,7 +1609,7 @@ Suggestions that are actionable given the current implementation.
 
 ### Overview
 
-The app uses **`vite-plugin-pwa`** with the **`generateSW`** strategy. Workbox precaches hashed assets; navigation falls back to `index.html` for SPA routing. Registration uses **`import { registerSW } from 'virtual:pwa-register'`** in `src/index.jsx` with `injectRegister: false` in the Vite plugin (registration is explicit in application code, not auto-injected into HTML).
+The app uses **`vite-plugin-pwa`** with the **`generateSW`** strategy. Workbox **precaches** hashed build assets; **runtime caching** (Milestone 17) adds CacheFirst for static file extensions and NetworkFirst for safe API **GET** reads. SPA **navigations** fall back to precached **`index.html`** (offline app shell only — not API mutation responses). Registration uses **`import { registerSW } from 'virtual:pwa-register'`** in `src/index.jsx` with `injectRegister: false` in the Vite plugin (registration is explicit in application code, not auto-injected into HTML).
 
 Additionally, **`src/pwa/`** holds **client-side** persistence and sync plumbing (Dexie / IndexedDB), **network status** hooks, and **browser geolocation** primitives used by the patrol feature. **`src/feature/patrol/services/geolocationService.js`** implements **patrol-domain** GPS orchestration (singleton watch lifecycle, **`saveLocationLog`**) on top of those primitives. **`PartrolHome`** mounts **`PatrolPwaStatusPanel`** (reads **`pwa/db.js`**, **`flushSyncQueue`**, **`useNetworkStatus`**) without starting or stopping GPS.
 
@@ -1576,11 +1631,38 @@ Additionally, **`src/pwa/`** holds **client-side** persistence and sync plumbing
 - **`src/pwa/useNetworkStatus.js`** exposes a boolean derived from **`navigator.onLine`** plus **`window`** **`online`** / **`offline`** listeners.
 - On **`online`**, **`flushSyncQueue()`** from **`src/pwa/syncService.js`** runs (errors are logged only — UI must not crash).
 
+### Background Sync (Milestone 16)
+
+Dexie/API logic stays in the **app thread**; the service worker only schedules sync and asks open clients to flush.
+
+| Step | Where | Behavior |
+|------|--------|----------|
+| Register | App (`backgroundSyncService`, `locationLogService`, `syncService`, `index.jsx`) | After **`saveLocationLog`**, after a failed flush, or on startup when **`sync_queue`** has **pending** / **failed** rows → **`registration.sync.register('pwa-sync-queue')`** (no-op if **`SyncManager`** missing). |
+| Fire | **`public/push-handlers.js`** | **`sync`** event with tag **`pwa-sync-queue`** → **`clients.matchAll`** → **`postMessage({ type: 'PWA_SYNC_REQUEST' })`**. |
+| Flush | **`src/index.jsx`** | Listens for SW messages; on **`PWA_SYNC_REQUEST`** → **`flushSyncQueue()`**. |
+| Fallback | **`useNetworkStatus`**, **`PatrolPwaStatusPanel`** | **`online`** event and **Retry Sync** unchanged when Background Sync is unsupported. |
+
+Push notification handlers in **`push-handlers.js`** are unchanged.
+
+### Service worker caching (Milestone 17)
+
+Configured in **`vite.config.mjs`** → **`pwa/workbox-runtime-caching.mjs`** (emitted into **`dist/sw.js`** on build).
+
+| Layer | Strategy | Cache name | Notes |
+|-------|----------|------------|--------|
+| Precache | Workbox precache manifest | (precache) | Hashed **`dist/assets/*`**, `index.html`, icons — existing **`globPatterns`** |
+| Static runtime | **CacheFirst** | `static-assets` | `js`, `css`, images, fonts; **maxEntries 100**, **maxAge 30 days** |
+| API GET runtime | **NetworkFirst** | `api-get-cache` | **`method: 'GET'`** only; **networkTimeoutSeconds 5**; **maxAge 5 minutes**; **`cacheableResponse: [200]`** |
+| API mutations | *(none)* | — | **POST/PUT/PATCH/DELETE** are not registered. Offline patrol writes use **IndexedDB** + **`POST /pwa/sync`**, not SW cache |
+| App navigation | **`navigateFallback: index.html`** | precache | Offline **app shell** for SPA routes; **`navigateFallbackAllowlist`** respects Vite **`base`** / React Router **`basename`**; denylist skips **`/api/*`** and excluded API paths |
+
+**Excluded from API GET runtime cache** (and navigation fallback where applicable): **`/pwa/sync`**, **`/patrol-routes`**, **`/auth/login`**, **`/auth/logout`**, **`/login`**. Checkpoint-event **writes** are excluded by the GET-only rule.
+
 ### IndexedDB (Dexie) & sync queue
 
 - **`src/pwa/db.js`** defines database **`PatrolPWA`** with schema migrations (**v1–v3**). Tables include **`location_logs`** (indexed fields include **`syncStatus`**, **`source`**, **`trackingState`** where applicable), **`sync_queue`** (**`payload`**, **`retryCount`**, **`lastAttempt`**), **`patrol_sessions`**, and **`notifications`** (schemas reserved for future use).
 - **`src/pwa/locationLogService.js`** — **`saveLocationLog`** assigns **`crypto.randomUUID()`**, normalizes **`LOCATION_SOURCE`** (**`live` \| `resume` \| `manual`**) and **`TRACKING_STATE`** (**`active` \| `resumed` \| `offline`**), stores lat/lng/accuracy/speed/heading/timestamp, sets **`syncStatus: pending`**, and inserts a companion **`sync_queue`** row whose **`payload`** mirrors fields sent later to **`POST /pwa/sync`**.
-- **`src/pwa/syncService.js`** — **`flushSyncQueue`** selects **`sync_queue`** rows with status **`pending`** or **`failed`**, sorts by **`createdAt`**, processes **one row at a time** (guarded so only one flush runs concurrently): sets **`syncing`**, posts **`payload`** to **`/pwa/sync`**, on success marks **`synced`** and updates **`location_logs.syncStatus`** for **`location_log`** types; on failure marks **`failed`**, increments **`retryCount`**, sets **`lastAttempt`**. Does **not** yet implement WebSockets, Background Sync, or push notifications.
+- **`src/pwa/syncService.js`** — **`flushSyncQueue`** reconciles **`sync_queue`** with **`POST /pwa/sync`**: **200/201** → **`synced`** or **`duplicate_synced`**; **422** → **`validation_failed`** (no auto-retry); **409** → **`conflict`**; other errors → **`failed`** with **`retryCount`** until **`exhausted`** (≥ 5). **`PatrolPwaStatusPanel`** shows validation/conflict/exhausted counts.
 
 ### Geolocation layering (infrastructure vs patrol domain)
 
@@ -1606,7 +1688,102 @@ It stops tracking with **`stopPatrolTracking`** on complete/unmount (replacing p
 | **`POST /pwa/sync`** **`patrolId`** | Same UUID | Must **`exists:patrol_sessions,id`** |
 | Route breadcrumbs | **`POST /patrol-routes`** with **`patrol_session_id`** | **`patrol_routes.patrol_session_id`** |
 
-Geofence **auto-completion** for checkpoints remains **implementation-dependent**: the controller still computes distances vs a radius; Laravel **`checkpoint_events`** store **`verified`** / **`detected_at`** without per-event lat/lng columns today — confirm against guard UX expectations.
+Geofence **auto-completion** for checkpoints: the controller computes distances vs a radius; on entry, **`patrolService.updateCheckpointLog`** PATCHes Laravel **`checkpoint_events`** with **`verified`**, **`detected_at`**, **`detection_type: continuous`**, and provisional **`confidence_score: 80`**. **Resume detection (Milestone 11):** on `visibilitychange` (visible) or `window` `focus`, if a patrol session is active, **`capturePatrolLocationSnapshot`** runs once with **`LOCATION_SOURCE.RESUME`** (5s cooldown; does **not** start/stop the GPS watch), then re-runs geofence checks and optionally **`recordPatrolRoute`**. Resume hits PATCH **`detection_type: resume`**, **`confidence_score: 65`**, and **`verified`** or **`uncertain`** when GPS accuracy is poor. Already-verified checkpoints are skipped. Per-event lat/lng are not persisted on the server — GPS remains in **`location_logs`** / **`patrol_routes`**.
+
+**Stop Patrol finalization (Milestone 2):** `usePatrolController.completePatrol` runs:
+
+1. Stop GPS (`stopPatrolTracking` via patrol geolocation service).
+2. `PUT /patrol-sessions/{id}` — `completed` + `ended_at`.
+3. `finalizingStep: syncing` → `flushSyncQueue()`.
+4. Inspect Dexie `sync_queue` (pending / failed / conflict / validation_failed / exhausted); set warning if any remain.
+5. If **online**: `finalizingStep: validating` → `POST /patrol-sessions/{id}/validate` → store `validationResult` (errors are non-fatal).
+6. If **offline**: skip validate; warning: *"Patrol saved locally. Validation will be available after sync."*
+7. `finalizingStep: loading_summary` → `GET /patrol-sessions/{id}/summary`.
+8. `finalizingStep: completed` — UI in **`PatrolSummaryCard`** shows validation + summary.
+
+**Provisional vs authoritative:** Live geofence PATCH (`confidence_score` 80/65) is provisional. Backend **`POST …/validate`** upserts authoritative **`checkpoint_events`** + metrics; summary reflects post-validation state.
+
+**Duplicate stop:** Ignored while `validatingPatrol` or `finalizingStep !== idle`.
+
+**`PatrolPwaStatusPanel`:** Warns when sync queue has failed/conflict/validation_failed/exhausted rows — *"Some patrol logs require attention. Backend validation may be incomplete."*
+
+### Patrol monitoring realtime (Milestone 5)
+
+**Stack:** Laravel **Reverb** (backend) + **laravel-echo** / **pusher-js** (frontend). Services live in `src/services/realtime/` — **not** in feature views (views/controllers only consume hooks).
+
+| File | Role |
+|------|------|
+| `services/realtime/broadcastService.js` | Singleton Echo connection, JWT auth to `POST /broadcasting/auth`, private channel subscribe/unsubscribe |
+| `services/realtime/usePatrolRealtime.js` | React hook: monitoring + optional session channel, connection state |
+| `services/realtime/patrolRealtimeNotifier.js` | Lightweight pub/sub for toast notifications |
+| `feature/patrol-monitoring/components/PatrolRealtimeSnackbar.jsx` | MUI snackbar for realtime alerts |
+| `feature/patrol-monitoring/controllers/patrolRealtimeHandlers.js` | Maps websocket event names → controller state updates |
+
+**Channels (private, admin JWT):**
+
+| Channel | Used by |
+|---------|---------|
+| `private-patrol.monitoring` | Dashboard — session lifecycle, suspicious checkpoints, validation completed |
+| `private-patrol.session.{patrolSessionId}` | Session detail — route crumbs, checkpoint status, validation |
+
+**Events (listen with leading dot, e.g. `.PatrolRouteUpdated`):**
+
+| Event | Payload highlights |
+|-------|-------------------|
+| `PatrolSessionStarted` | `patrol_session_id`, `session` |
+| `PatrolSessionCompleted` | `patrol_session_id`, `status`, `session` |
+| `PatrolCheckpointVerified` | `checkpoint_event_id`, `checkpoint_id`, `status`, `confidence_score`, `detected_at`, `event` |
+| `PatrolCheckpointSuspicious` | Same shape; fired for `suspicious` **or** `uncertain` |
+| `PatrolRouteUpdated` | `patrol_session_id`, `latitude`, `longitude`, `accuracy`, `recorded_at` |
+| `PatrolValidationCompleted` | `patrol_session_id`, `validation` |
+
+**Reconnect / fallback:**
+
+- Echo connection states exposed as `connectionState` / `isConnected` on controllers.
+- When **not** connected, dashboard and detail run **30s polling** (`loadStats` / `loadSessions` / `loadAll`) — existing REST flows unchanged.
+- Set `VITE_REVERB_ENABLED=false` or omit `VITE_REVERB_APP_KEY` to disable websockets (polling only).
+
+**Frontend env (build-time):**
+
+| Variable | Purpose |
+|----------|---------|
+| `VITE_REVERB_APP_KEY` | Reverb app key (must match backend `REVERB_APP_KEY`) |
+| `VITE_REVERB_HOST` | WebSocket host (e.g. `localhost`) |
+| `VITE_REVERB_PORT` | WebSocket port (e.g. `8080`) |
+| `VITE_REVERB_SCHEME` | `http` or `https` |
+| `VITE_REVERB_ENABLED` | Optional; `false` disables realtime |
+
+**Toasts:** suspicious checkpoint, patrol completed/aborted, validation completed, large GPS gap (>300s between route points on detail map).
+
+**Map:** `PatrolRouteMap` incrementally appends polyline points on live `PatrolRouteUpdated` (preserves zoom after initial fit).
+
+**Run Reverb locally:** `php artisan reverb:start` (backend) with `BROADCAST_CONNECTION=reverb`.
+
+### Patrol monitoring dashboard (Milestone 3 + 4)
+
+**Module:** `src/feature/patrol-monitoring/` — view → controller → repository → `patrolMonitoringService`.
+
+| File | Role |
+|------|------|
+| `views/PatrolMonitoringDashboard.jsx` | Stats cards, filters, session table, pagination |
+| `views/PatrolSessionDetail.jsx` | Session info, summary, **patrol route map**, checkpoint events, **Re-run Validation** |
+| `controllers/usePatrolMonitoringController.js` | List loading, filters, summary prefetch for completed rows |
+| `controllers/usePatrolSessionDetailController.js` | Detail load; validation + reload summary/events/**routes** |
+| `datasources/patrolMonitoringService.js` | Laravel API adapter (401/403/422/409/5xx messages) |
+| `components/PatrolSessionTable.jsx` | Dashboard table |
+| `components/PatrolStatusChip.jsx` | Status chips (patrol / checkpoint / confidence) |
+| `components/PatrolConfidenceCard.jsx` | Summary confidence display |
+| `components/CheckpointStatusSummary.jsx` | Verified / suspicious / uncertain / rejected counts |
+| `components/PatrolRouteMap.jsx` | Leaflet map: trail, breadcrumbs, checkpoints, start/end, GPS gaps |
+| `components/MapLegend.jsx` | Map color legend |
+
+**Dashboard:** `GET /patrol-sessions` with server pagination; optional `status` and `zone_id` filters; client search on guard/zone name (loads up to 100 rows when searching). Stats use lightweight `per_page=1` meta totals. Suspicious/uncertain headline counts come from `GET /checkpoint-events?status=…` totals.
+
+**Detail:** Loads session, summary, checkpoint events, and patrol routes (`GET /patrol-routes?patrol_session_id={id}`). **Patrol route map** (between summary and checkpoint table) uses Leaflet from CDN (`index.html`); shows checkpoint markers by status color, polyline trail ordered by `recorded_at`, breadcrumb dots, start/end pins, and dashed **GPS gap** segments when consecutive route points differ by **> 30s**. Auto-fits bounds to routes + checkpoints. Empty state: *"No patrol route data available."* **Re-run Validation** calls `POST /patrol-sessions/{id}/validate` (backend authoritative — same engine as guard stop flow), then refreshes summary, events, and routes. Failures show an alert without crashing the page.
+
+**Map library:** No npm `leaflet` package — reuses global **`window.L`** (Leaflet 1.9.4 CDN in `index.html`), same pattern as `feature/management-checkpoint/components/LeafletMap.jsx`.
+
+**Provisional vs authoritative:** Dashboard reflects backend-persisted `checkpoint_events` after validation; guard live PATCH scores remain provisional until validate runs.
 
 ### Sidebar install UX
 
@@ -1623,18 +1800,49 @@ Geofence **auto-completion** for checkpoints remains **implementation-dependent*
 
 | Path | Role |
 |------|------|
-| `vite.config.mjs` | `VitePWA({ manifest, workbox, registerType: 'autoUpdate', injectRegister: false, … })` |
+| `vite.config.mjs` | `VitePWA({ manifest, workbox, registerType: 'autoUpdate', injectRegister: false, … })` — **`pwa/workbox-runtime-caching.mjs`** supplies **`runtimeCaching`** + navigation fallback lists |
+| `pwa/workbox-runtime-caching.mjs` | Workbox **runtimeCaching**: **`static-assets`** (CacheFirst, 30d) + **`api-get-cache`** (NetworkFirst GET only, 5 min, HTTP 200). Mutations not cached. |
 | `hooks/usePwaInstallPrompt.js` | Install prompt state + safe media-query listeners |
 | `layout/MainLayout/Sidebar/SidebarPwaInstall.jsx` | Install button UI + optional mobile debug logs |
 | `App.jsx` | Global **`NetworkSnackbar`** |
-| `pwa/db.js`, `pwa/locationLogService.js`, `pwa/syncService.js`, `pwa/useNetworkStatus.js`, `pwa/geolocationService.js` | Offline storage, sync POST (**`/pwa/sync`**), connectivity hook, browser geo primitives |
+| `public/push-handlers.js` | Workbox **`importScripts`**: Web Push + Background **`sync`** → client **`PWA_SYNC_REQUEST`** |
+| `pwa/db.js`, `pwa/locationLogService.js`, `pwa/syncService.js`, `pwa/backgroundSyncService.js`, `pwa/useNetworkStatus.js`, `pwa/geolocationService.js` | Offline storage, sync POST (**`/pwa/sync`**), Background Sync registration, connectivity hook, browser geo primitives |
 | `feature/patrol/services/geolocationService.js` | Patrol GPS orchestration + **`saveLocationLog`** |
 | `feature/patrol/controllers/usePatrolController.js` | Patrol workflow; sole starter/stopper of patrol GPS (not raw **`navigator.geolocation`**) |
 | `feature/patrol/components/PatrolPwaStatusPanel.jsx` | Patrol-page PWA/GPS status (Dexie queries ~3s, Retry **`flushSyncQueue`**) |
 | `feature/patrol/components/PatrolTracking.jsx` | Presentational checkpoint list + coords (**no** **`startPatrolTracking`** / **`stopPatrolTracking`**) |
 | `feature/patrol/views/PartrolHome.jsx` | Only guard patrol route UI; composes **`PatrolTracking`** + **`PatrolPwaStatusPanel`** |
-| `feature/authentication/controllers/useAuthController.js` | Minimal `currentUser` from `localStorage` `auth_user` (used by patrol feature; unrelated to service worker install) |
+| `feature/authentication/datasources/authService.js` | `POST /auth/logout` |
+| `feature/authentication/repositories/authRepository.js` | Delegates logout to `authService` |
+| `feature/authentication/controllers/useAuthController.js` | `currentUser`, `handleLogout`, cross-tab session sync (used by patrol + Profile menu) |
+| `layout/MainLayout/Header/ProfileSection/index.jsx` | Profile menu; Logout → `handleLogout` |
+| `services/realtime/broadcastService.js` | `disconnect()` on logout (Echo teardown) |
+| `feature/management-checkpoint/` | Admin checkpoint CRUD — see below |
+
+### Checkpoint management (Milestone 8)
+
+**Access:** **Admin** only (`RoleProtectedRoute` + `menu-items/admin.js` → Management → **Checkpoint**). Security Operator and Guard do not see this menu item.
+
+**Architecture:** `views` → `useCheckpointController` / `useCheckpointFormController` / `useCheckpointViewController` → `CheckpointRepository` → `checkpointService` → `api.js`. Zones for dropdowns load via `zoneService` (delegated from `checkpointService.getZones()`).
+
+**API methods (`checkpointService.js`):**
+
+| Method | HTTP | Notes |
+|--------|------|-------|
+| `getCheckpoints(params)` | `GET /checkpoints` | Query: `page`, `per_page`, `zone_id`, `is_active`, `location_type`, `search` |
+| `getCheckpointById(id)` | `GET /checkpoints/{id}` | Includes nested `zone` |
+| `createCheckpoint(data)` | `POST /checkpoints` | |
+| `updateCheckpoint(id, data)` | `PATCH /checkpoints/{id}` | |
+| `deleteCheckpoint(id)` | `DELETE /checkpoints/{id}` | Backend returns **204** |
+
+**Form fields:** `name`, `zone_id`, `latitude`, `longitude`, `radius` (5–100 m per backend validation), `location_type` (`outdoor` \| `indoor`), `is_active`. Defaults on create: `location_type=outdoor`, `radius=20`, `is_active=true`; switching type on create sets recommended radius (outdoor **20**, indoor **40**). On edit, changing type does **not** auto-change radius — use **Use recommended radius** button.
+
+**Map picker (`CheckpointMapPicker.jsx`):** Leaflet via global `window.L` (CDN in `index.html`). Draggable marker; map click updates lat/lng; radius circle syncs with form. Default center **Kuala Lumpur** (3.139, 101.6869) when coordinates empty. View page uses read-only `LeafletMap.jsx` with marker + circle.
+
+**List UI:** Search by name, filter by zone / active / location type, server-side pagination, view / edit / delete actions. Delete uses `window.confirm` (technical debt — prefer MUI dialog later). Snackbar feedback on delete.
+
+**Delete:** Does not touch PWA IndexedDB or patrol runtime data — only removes the checkpoint record on the server.
 
 ---
 
-_Last updated: document revised for patrol **`patrol_sessions`** / **`patrolId`** contract with **`POST /api/pwa/sync`**, **`POST /patrol-routes`** breadcrumbs, single GPS orchestration path (**`usePatrolController`** + **`PatrolTracking`** presentational-only), **`PatrolPwaStatusPanel`**, PWA IndexedDB/sync (**`dexie`**, **`syncService`**, **`locationLogService`**), global **`NetworkSnackbar`**, layered geolocation (**`pwa/geolocationService`** vs **`feature/patrol/services/geolocationService`**), and **`patrolService.normalizeZonesResponse`** / **`PatrolRepository.getAllZones`** / **`loadZones`** behavior for **`GET /zones`**. **`feature/patrol-history`** may still reference legacy patrol HTTP paths — guard **`feature/patrol`** is the Laravel-aligned reference. Keep this file in sync whenever routing, authentication, API contracts, feature modules, PWA settings, or environment variables change. Source files remain the source of truth._
+_Last updated: document revised for Milestone 8 **checkpoint management UI**, Milestone 7 **logout flow** (Profile menu, `clearAuthSession`, Reverb disconnect, cross-tab sign-out), Milestone 6 **role-based route protection** (`RoleProtectedRoute`, role menus, `/patrol`, `/forbidden`), Milestone 5 **realtime patrol monitoring**, Milestone 4 **patrol route map visualization**, Milestone 3 **admin patrol monitoring dashboard**, Milestone 2 **frontend validation integration** (stop patrol → sync → validate → summary), backend Milestone 1 validation engine, Milestone 18 **sync conflict handling** (`resultStatus`, 409/422/duplicate), Milestone 17 **service worker caching**, Milestone 16 **Background Sync**, patrol **`patrolId`** + **`POST /api/pwa/sync`**, **`PatrolPwaStatusPanel`**, and PWA IndexedDB/sync. **`feature/patrol`** is the Laravel-aligned guard reference. Keep this file in sync whenever routing, authentication, API contracts, feature modules, PWA settings, or environment variables change. Source files remain the source of truth._

@@ -1,214 +1,218 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import dayjs from 'dayjs';
-import utc from 'dayjs/plugin/utc';
-import timezone from 'dayjs/plugin/timezone';
+import { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-// Setup dayjs plugins
-dayjs.extend(utc);
-dayjs.extend(timezone);
+import { DEFAULT_MAP_CENTER, RECOMMENDED_RADIUS } from '../utils/checkpointConstants';
+import {
+  buildCheckpointPayload,
+  extractBackendErrorMessage,
+  extractBackendValidationErrors,
+  normalizeValidationErrorsForForm,
+  validateCheckpointForm
+} from '../utils/checkpointValidation';
 
-export const useCheckpointFormController = (repository, zoneId, checkpointId = null) => {
+const defaultFormData = (zoneId = '') => ({
+  zone_id: zoneId,
+  name: '',
+  latitude: '',
+  longitude: '',
+  radius: RECOMMENDED_RADIUS.outdoor,
+  location_type: 'outdoor',
+  is_active: true
+});
+
+export const useCheckpointFormController = (repository, checkpointId = null) => {
   const navigate = useNavigate();
-  const fileInputRef = useRef(null);
+  const location = useLocation();
+  const initialZoneId = location.state?.zoneId ?? '';
 
-  const [formData, setFormData] = useState({
-    // zone_id: zoneId,
-    name: '',
-    description: '',
-    latitude: '',
-    longitude: ''
-  });
-
+  const isEdit = Boolean(checkpointId);
+  const [formData, setFormData] = useState(() => defaultFormData(initialZoneId));
+  const [zones, setZones] = useState([]);
+  const [zonesLoading, setZonesLoading] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(!!checkpointId);
+  const [initialLoading, setInitialLoading] = useState(isEdit);
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [savedCheckpointId, setSavedCheckpointId] = useState(null);
 
-  const extractBackendValidationErrors = (error) => {
-    return error?.validationErrors || error?.data?.data?.errors || error?.data?.errors || null;
-  };
+  const noZones = !zonesLoading && zones.length === 0;
 
-  const extractBackendErrorMessage = (error) => {
-    const validationErrors = extractBackendValidationErrors(error);
-    if (validationErrors && typeof validationErrors === 'object') {
-      const firstFieldErrors = Object.values(validationErrors).find((messages) => Array.isArray(messages) && messages.length > 0);
-      if (Array.isArray(firstFieldErrors)) {
-        return firstFieldErrors[0];
-      }
+  const loadZones = useCallback(async () => {
+    try {
+      setZonesLoading(true);
+      const payload = await repository.getZones();
+      setZones(repository.normalizeZonesList(payload));
+    } catch (err) {
+      console.error('Failed to load zones:', err);
+      setSubmitError(err?.message || 'Failed to load zones.');
+    } finally {
+      setZonesLoading(false);
     }
+  }, [repository]);
 
-    return error?.data?.message || error?.message || 'Failed to save checkpoint.';
-  };
-
-  const normalizeValidationErrorsForForm = (validationErrors) => {
-    if (!validationErrors || typeof validationErrors !== 'object') return {};
-
-    return Object.entries(validationErrors).reduce((acc, [field, messages]) => {
-      acc[field] = Array.isArray(messages) ? messages[0] : messages;
-      return acc;
-    }, {});
-  };
-
-  useEffect(() => {
-    if (checkpointId) {
-      loadCheckpoint();
-    }
-  }, [checkpointId]);
-
-  // Auto-redirect effect
-  useEffect(() => {
-    let timer;
-    if (showSuccessModal) {
-      timer = setTimeout(() => {
-        handleModalClose();
-      }, 2000);
-    }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [showSuccessModal]);
-
-  const loadCheckpoint = async () => {
+  const loadCheckpoint = useCallback(async () => {
+    if (!checkpointId) return;
     try {
       setInitialLoading(true);
-      const checkpoint = await repository.getCheckpointById(checkpointId);
-      if (checkpoint && checkpoint.data) {
-        setFormData({
-          name: checkpoint.data.name || '',
-          description: checkpoint.data.description || '',
-          latitude: checkpoint.data.latitude || '',
-          longitude: checkpoint.data.longitude || ''
-        });
-      }
-    } catch (error) {
-      console.error('Failed to load checkpoint:', error);
-      alert('Failed to load checkpoint data');
+      const response = await repository.getCheckpointById(checkpointId);
+      const cp = response?.data ?? response;
+      if (!cp) return;
+
+      setFormData({
+        zone_id: cp.zone_id ?? '',
+        name: cp.name ?? '',
+        latitude: cp.latitude ?? '',
+        longitude: cp.longitude ?? '',
+        radius: cp.radius ?? RECOMMENDED_RADIUS.outdoor,
+        location_type: cp.location_type ?? 'outdoor',
+        is_active: cp.is_active !== false
+      });
+    } catch (err) {
+      console.error('Failed to load checkpoint:', err);
+      setSubmitError(err?.message || 'Failed to load checkpoint.');
     } finally {
       setInitialLoading(false);
     }
-  };
+  }, [repository, checkpointId]);
+
+  useEffect(() => {
+    loadZones();
+  }, [loadZones]);
+
+  useEffect(() => {
+    if (isEdit) {
+      loadCheckpoint();
+    }
+  }, [isEdit, loadCheckpoint]);
+
+  useEffect(() => {
+    let timer;
+    if (showSuccessModal) {
+      timer = setTimeout(() => handleModalClose(), 2000);
+    }
+    return () => timer && clearTimeout(timer);
+  }, [showSuccessModal]);
 
   const handleChange = (field) => (eventOrValue) => {
-    let value;
+    let value = eventOrValue?.target !== undefined ? eventOrValue.target.value : eventOrValue;
 
-    // Handle both regular input events and time picker values
-    if (eventOrValue && eventOrValue.target) {
-      // Regular input field
-      value = eventOrValue.target.value;
-    } else {
-      // Time picker or direct value
-      value = eventOrValue;
+    if (field === 'is_active' && eventOrValue?.target) {
+      value = eventOrValue.target.checked;
     }
 
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value };
+
+      if (field === 'location_type' && !isEdit) {
+        next.radius = RECOMMENDED_RADIUS[value] ?? prev.radius;
+      }
+
+      return next;
+    });
+
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: '' }));
+    }
+    setSubmitError('');
+  };
+
+  const handleCoordinatesChange = ({ latitude, longitude }) => {
     setFormData((prev) => ({
       ...prev,
-      [field]: value
+      latitude: latitude ?? prev.latitude,
+      longitude: longitude ?? prev.longitude
     }));
-
-    // Clear error for this field if it exists
-    if (errors[field]) {
-      setErrors((prev) => ({
-        ...prev,
-        [field]: ''
-      }));
-    }
+    setErrors((prev) => ({ ...prev, latitude: '', longitude: '' }));
   };
 
-  const validate = () => {
-    const newErrors = {};
-
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
+  const handleApplyRecommendedRadius = () => {
+    const recommended = RECOMMENDED_RADIUS[formData.location_type] ?? RECOMMENDED_RADIUS.outdoor;
+    setFormData((prev) => ({ ...prev, radius: recommended }));
+    if (errors.radius) {
+      setErrors((prev) => ({ ...prev, radius: '' }));
     }
-
-    if (!formData.description.trim()) {
-      newErrors.description = 'Description is required';
-    }
-
-    if (!formData.latitude.trim()) {
-      newErrors.latitude = 'Latitude is required';
-    }
-
-    if (!formData.longitude.trim()) {
-      newErrors.longitude = 'Longitude is required';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const prepareFormDataForAPI = () => {
-    const data = {
-      ...formData,
-      latitude: Number.parseFloat(formData.latitude),
-      longitude: Number.parseFloat(formData.longitude)
-    };
-
-    // Make sure we have zone_id
-    data.zone_id = zoneId;
-
-    if (!checkpointId) {
-      data.radius = 20;
-      data.location_type = 'outdoor';
-      data.is_active = true;
-    }
-
-    return data;
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    setSubmitError('');
 
-    if (!validate()) {
+    const { errors: validationErrors, isValid } = validateCheckpointForm(formData, { isEdit });
+    if (!isValid) {
+      setErrors(validationErrors);
+      return;
+    }
+
+    if (noZones) {
+      setSubmitError('Create at least one zone before adding checkpoints.');
       return;
     }
 
     try {
       setLoading(true);
-      const apiData = prepareFormDataForAPI();
+      const payload = buildCheckpointPayload(formData);
 
-      if (checkpointId) {
-        await repository.updateCheckpoint(checkpointId, apiData);
-        setShowSuccessModal(true);
+      if (isEdit) {
+        await repository.updateCheckpoint(checkpointId, payload);
+        setSavedCheckpointId(checkpointId);
       } else {
-        const newCheckpoint = await repository.createCheckpoint(apiData);
-        setShowSuccessModal(true);
+        const response = await repository.createCheckpoint(payload);
+        const created = response?.data ?? response;
+        setSavedCheckpointId(created?.id ?? null);
       }
-    } catch (error) {
-      console.error('Failed to save checkpoint:', error);
-      const backendValidationErrors = extractBackendValidationErrors(error);
+
+      setShowSuccessModal(true);
+    } catch (err) {
+      console.error('Failed to save checkpoint:', err);
+      const backendValidationErrors = extractBackendValidationErrors(err);
       if (backendValidationErrors) {
-        const normalizedErrors = normalizeValidationErrorsForForm(backendValidationErrors);
-        setErrors((prev) => ({ ...prev, ...normalizedErrors }));
+        setErrors((prev) => ({ ...prev, ...normalizeValidationErrorsForForm(backendValidationErrors) }));
       }
-      alert('Failed to save checkpoint: ' + extractBackendErrorMessage(error));
+      setSubmitError(extractBackendErrorMessage(err, 'Failed to save checkpoint.'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancel = () => {
-    navigate(`/admin/management-zone/view/${zoneId}`);
+    navigate('/admin/management-checkpoint');
   };
 
   const handleModalClose = () => {
     setShowSuccessModal(false);
-    if (checkpointId) {
-      navigate(`/admin/management-checkpoint/view/${checkpointId}`);
-    } else {
-      navigate(`/admin/management-zone/view/${zoneId}`);
+    if (savedCheckpointId) {
+      navigate(`/admin/management-checkpoint/${savedCheckpointId}`);
+      return;
     }
+    navigate('/admin/management-checkpoint');
   };
+
+  const mapLatitude =
+    formData.latitude === '' || formData.latitude == null
+      ? DEFAULT_MAP_CENTER.latitude
+      : Number(formData.latitude);
+  const mapLongitude =
+    formData.longitude === '' || formData.longitude == null
+      ? DEFAULT_MAP_CENTER.longitude
+      : Number(formData.longitude);
 
   return {
     formData,
     errors,
     loading,
     initialLoading,
+    submitError,
+    zones,
+    zonesLoading,
+    noZones,
+    isEdit,
     showSuccessModal,
-    fileInputRef,
+    mapLatitude,
+    mapLongitude,
     handleChange,
+    handleCoordinatesChange,
+    handleApplyRecommendedRadius,
     handleSubmit,
     handleCancel,
     handleModalClose

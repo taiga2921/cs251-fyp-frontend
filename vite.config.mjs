@@ -6,6 +6,12 @@ import react from '@vitejs/plugin-react';
 import jsconfigPaths from 'vite-jsconfig-paths';
 import { VitePWA } from 'vite-plugin-pwa';
 
+import {
+  buildNavigateFallbackAllowlist,
+  buildNavigateFallbackDenylist,
+  buildRuntimeCaching
+} from './pwa/workbox-runtime-caching.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = path.resolve(__dirname, 'src');
 const REACT_PKG = path.resolve(__dirname, 'node_modules/react');
@@ -68,6 +74,7 @@ function jsconfigSrcBaseUrlFallback() {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const API_URL = `${env.VITE_APP_BASE_NAME}`;
+  const API_BASE_URL = env.VITE_API_BASE_URL || 'http://localhost:8000/api';
   const PORT = 3000;
 
   return {
@@ -141,7 +148,13 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          navigateFallback: 'index.html'
+          // App shell offline fallback for SPA navigations (React Router basename = Vite `base`).
+          navigateFallback: 'index.html',
+          navigateFallbackDenylist: buildNavigateFallbackDenylist(API_BASE_URL),
+          navigateFallbackAllowlist: buildNavigateFallbackAllowlist(API_URL),
+          // POST/PUT/PATCH/DELETE are intentionally omitted — see pwa/workbox-runtime-caching.mjs.
+          runtimeCaching: buildRuntimeCaching(API_BASE_URL),
+          importScripts: ['push-handlers.js']
         }
       })
     ]
