@@ -11,10 +11,20 @@ const CHECKPOINT_LEGEND = [
 
 const ROUTE_LEGEND = [
   { label: 'Patrol trail', color: '#2563eb', style: 'solid' },
+  { label: 'Replay traversed', color: '#059669', style: 'solid' },
+  { label: 'Replay remaining', color: '#cbd5e1', style: 'dashed' },
+  { label: 'Guard (replay)', color: '#0ea5e9', style: 'pin' },
   { label: 'GPS gap (>30s)', color: '#f97316', style: 'dashed' },
   { label: 'Breadcrumb', color: '#64748b', style: 'dot' },
   { label: 'Start', color: '#16a34a', style: 'pin' },
   { label: 'End', color: '#dc2626', style: 'pin' }
+];
+
+const ANOMALY_LEGEND = [
+  { label: 'Speed anomaly', color: '#dc2626', style: 'dashed' },
+  { label: 'GPS jump', color: '#9333ea', style: 'dashed' },
+  { label: 'Poor accuracy', color: '#ea580c', style: 'dashed' },
+  { label: 'Timestamp issue', color: '#1e293b', style: 'pin' }
 ];
 
 function LegendSwatch({ color, style }) {
@@ -63,7 +73,7 @@ LegendSwatch.propTypes = {
   style: PropTypes.string
 };
 
-export default function MapLegend({ gapCount = 0 }) {
+export default function MapLegend({ gapCount = 0, anomalyCount = 0 }) {
   return (
     <Box sx={{ mt: 1 }}>
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
@@ -71,6 +81,17 @@ export default function MapLegend({ gapCount = 0 }) {
       </Typography>
       <Stack direction="row" flexWrap="wrap" useFlexGap spacing={2} sx={{ mb: 1 }}>
         {ROUTE_LEGEND.map((item) => (
+          <Stack key={item.label} direction="row" alignItems="center" spacing={0.75}>
+            <LegendSwatch color={item.color} style={item.style} />
+            <Typography variant="caption">{item.label}</Typography>
+          </Stack>
+        ))}
+      </Stack>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+        Suspicious movement (after validation)
+      </Typography>
+      <Stack direction="row" flexWrap="wrap" useFlexGap spacing={2} sx={{ mb: 1 }}>
+        {ANOMALY_LEGEND.map((item) => (
           <Stack key={item.label} direction="row" alignItems="center" spacing={0.75}>
             <LegendSwatch color={item.color} style={item.style} />
             <Typography variant="caption">{item.label}</Typography>
@@ -99,10 +120,16 @@ export default function MapLegend({ gapCount = 0 }) {
           {gapCount} GPS gap{gapCount === 1 ? '' : 's'} detected between route points (&gt;30s).
         </Typography>
       ) : null}
+      {anomalyCount > 0 ? (
+        <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: gapCount > 0 ? 0.5 : 1 }}>
+          {anomalyCount} suspicious segment{anomalyCount === 1 ? '' : 's'} from backend validation.
+        </Typography>
+      ) : null}
     </Box>
   );
 }
 
 MapLegend.propTypes = {
-  gapCount: PropTypes.number
+  gapCount: PropTypes.number,
+  anomalyCount: PropTypes.number
 };

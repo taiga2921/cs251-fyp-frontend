@@ -39,7 +39,7 @@ The frontend currently provides:
 - Sample dashboard widgets (charts, cards) inherited from the Berry template.
 - Theme customization (light scheme + CSS variables) with font family / border radius adjustments persisted to `localStorage`.
 - **Progressive Web App (PWA)** support via `vite-plugin-pwa` (service worker precache, web app manifest, optional **Install App** UI in the sidebar when the browser fires `beforeinstallprompt`).
-- **PWA client layer (`src/pwa/`)** — offline-aware UX (`NetworkSnackbar`), Dexie **IndexedDB** for patrol location logs and a **sync queue**, a **`flushSyncQueue`** sync engine posting to `POST /api/pwa/sync`, **Background Sync** (tag **`pwa-sync-queue`**: SW notifies clients → app-thread flush; falls back to **`online`** + **Retry Sync** when unsupported), **`pushNotificationService`** (Web Push subscribe/unsubscribe → `POST /api/push-subscriptions`), and shared **`useNetworkStatus`** (browser online/offline events). Custom SW handlers: **`public/push-handlers.js`** (push + **`sync`**) loaded via Workbox **`importScripts`** (keeps **`generateSW`**).
+- **PWA client layer (`src/pwa/`)** — offline-aware UX (`NetworkSnackbar`), Dexie **IndexedDB** for patrol location logs and a **sync queue**, a **`flushSyncQueue`** sync engine posting to `POST /api/pwa/sync`, **Background Sync** (tag **`pwa-sync-queue`**: SW notifies clients → app-thread flush; falls back to **`online`** + **Retry Sync** when unsupported), **`pushNotificationService`** (subscribe/unsubscribe → `POST/DELETE /api/push-subscriptions`; **outbound** test → `POST /api/push-notifications/test`), and shared **`useNetworkStatus`**. Custom SW: **`public/push-handlers.js`** (push display + **`notificationclick`** deep links + Background **`sync`**).
 - **Patrol module (`feature/patrol`)** — single guard page **`views/PartrolHome.jsx`** + **`usePatrolController`**: creates Laravel **`patrol_sessions`** and **`checkpoint-events`** placeholders, posts GPS breadcrumbs to **`POST /patrol-routes`**, and drives live GPS only via **`feature/patrol/services/geolocationService`** ( **`saveLocationLog`** → Dexie + **`sync_queue`**). **Stop Patrol** runs: flush PWA sync → **`POST /patrol-sessions/{id}/validate`** (when online) → **`GET /patrol-sessions/{id}/summary`**; results in **`PatrolSummaryCard.jsx`** (backend validation section + final summary). Live geofence PATCH confidence (80/65) remains **provisional** until backend validation. **`components/PatrolTracking.jsx`** is presentational; **`PatrolPwaStatusPanel.jsx`** shows sync/GPS telemetry and sync-queue warnings. Raw **`navigator.geolocation`** is not used from the controller.
 
 ### Core Functionality
@@ -57,8 +57,9 @@ The frontend currently provides:
 | Checkpoint management | **Implemented** | `feature/management-checkpoint` — full admin CRUD at `/admin/management-checkpoint` with map picker, filters, server pagination. **Admin only** (menu + routes). |
 | Camera management | **Partially implemented** | Menu item exists; dedicated UI not complete. |
 | Patrol (guard) | **Implemented (functional)** | `feature/patrol` — Laravel **`patrol_sessions.id`** is end-to-end **`patrolId`** (Dexie **`location_logs.patrolId`** and **`POST /pwa/sync`** payload **`patrolId`** match); checkpoints via **`checkpoint-events`**; route crumbs via **`POST /patrol-routes`**; GPS only **`usePatrolController`** + **`services/geolocationService`**; **`PatrolPwaStatusPanel`**. See [Section 15](#15-progressive-web-app-pwa). |
-| Patrol Monitoring (admin) | **Implemented** | `feature/patrol-monitoring` — dashboard + session detail at **`/admin/patrol-monitoring`**; lists patrol sessions, summaries, checkpoint events, **route map** (Leaflet CDN); **live updates** via Laravel Reverb + Echo (30s polling fallback); **Re-run Validation** calls backend **`POST …/validate`**. |
-| PWA offline / sync | **Implemented (core)** | IndexedDB + sync queue + global **`NetworkSnackbar`**; **`POST /api/pwa/sync`** (**JWT**) drains **`location_log`** rows idempotently. **Background Sync** registers tag **`pwa-sync-queue`** when the queue has work; SW **`sync`** posts **`PWA_SYNC_REQUEST`** to clients → **`flushSyncQueue`**. **Retry Sync** + auto-flush on **`online`** remain when Background Sync is unavailable. Web Push subscribe/unsubscribe is implemented. Admin patrol monitoring uses **Reverb WebSockets** (separate from PWA). |
+| Patrol Monitoring (admin) | **Implemented** | `feature/patrol-monitoring` — dashboard + session detail at **`/admin/patrol-monitoring`**; lists patrol sessions, summaries, checkpoint events, **route map** (Leaflet CDN) with **suspicious segment overlays** (Milestone 10) and **patrol replay** on completed/aborted sessions (Milestone 11); **live updates** via Laravel Reverb + Echo (30s polling fallback); **Re-run Validation** calls backend **`POST …/validate`**. |
+| PWA offline / sync | **Implemented (core)** | IndexedDB + sync queue + global **`NetworkSnackbar`**; **`POST /api/pwa/sync`** (**JWT**) drains **`location_log`** rows idempotently. **Background Sync** registers tag **`pwa-sync-queue`** when the queue has work; SW **`sync`** posts **`PWA_SYNC_REQUEST`** to clients → **`flushSyncQueue`**. **Retry Sync** + auto-flush on **`online`** remain when Background Sync is unavailable. |
+| Web Push (PWA) | **Implemented** | Subscribe/unsubscribe + **outbound** patrol alerts from Laravel (`WebPushNotificationService`). **`PatrolPwaStatusPanel`**: permission/subscription state, **Send Test Notification** (`POST /push-notifications/test` — `success: true` only when at least one device receives the push; `data` includes delivery counts). Reverb realtime remains separate. |
 | Theme Customization | Implemented | Font family + border radius drawer (toggle button itself is currently commented out). |
 | Notifications | UI-only | Static demo data. |
 
@@ -117,7 +118,7 @@ See [Section 11](#11-dependencies) for the full table.
 The frontend talks to the Laravel API in `backend-laravel-v1`. The relationship is:
 
 - **Base URL:** `import.meta.env.VITE_API_BASE_URL` (default `http://localhost:8000/api`).
-- **Web Push VAPID public key:** `import.meta.env.VITE_VAPID_PUBLIC_KEY` (URL-safe base64; required for **Enable Notifications** in `PatrolPwaStatusPanel`).
+- **Web Push VAPID public key:** `import.meta.env.VITE_VAPID_PUBLIC_KEY` (URL-safe base64; must match backend `VAPID_PUBLIC_KEY`). **Private key stays on the server only.**
 - **Auth scheme:** JWT bearer token (`Authorization: Bearer <token>`); token saved in `localStorage` under key `access_token`.
 - **Endpoints actually called from the frontend (non-exhaustive; see [Section 5](#5-api-integration)):**
   - `POST /login` (with fallback to `POST /auth/login` on 404) — login.
@@ -811,6 +812,7 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 | `broadcastService` (Echo) | `POST` | `/broadcasting/auth` — JWT private channel auth (Reverb WebSocket) |
 | `pushNotificationService` (subscribe) | `POST` | `/push-subscriptions` |
 | `pushNotificationService` (unsubscribe) | `DELETE` | `/push-subscriptions/{id}` |
+| `pushNotificationService.sendTestNotification` | `POST` | `/push-notifications/test` |
 | `syncService.flushSyncQueue` | `POST` | `/pwa/sync` |
 
 ### Frontend ↔ Laravel Communication
@@ -1642,7 +1644,9 @@ Dexie/API logic stays in the **app thread**; the service worker only schedules s
 | Flush | **`src/index.jsx`** | Listens for SW messages; on **`PWA_SYNC_REQUEST`** → **`flushSyncQueue()`**. |
 | Fallback | **`useNetworkStatus`**, **`PatrolPwaStatusPanel`** | **`online`** event and **Retry Sync** unchanged when Background Sync is unsupported. |
 
-Push notification handlers in **`push-handlers.js`** are unchanged.
+**Outbound push (Milestone 9):** Laravel sends JSON payloads (`title`, `body`, `url`, `tag`, …) when patrol sessions complete/abort, checkpoint events become suspicious/uncertain, or validation finishes. Admins/operators receive monitoring deep links; guards may receive rejected-checkpoint alerts.
+
+**`push-handlers.js`:** `push` displays notifications; **`notificationclick`** opens `data.url` (or top-level `url`), focuses an existing window when possible (`client.navigate`), otherwise `openWindow`. Falls back to `/`.
 
 ### Service worker caching (Milestone 17)
 
@@ -1687,6 +1691,7 @@ It stops tracking with **`stopPatrolTracking`** on complete/unmount (replacing p
 | Dexie **`location_logs.patrolId`** | Same UUID as patrol session | **`location_logs.patrol_session_id`** on sync |
 | **`POST /pwa/sync`** **`patrolId`** | Same UUID | Must **`exists:patrol_sessions,id`** |
 | Route breadcrumbs | **`POST /patrol-routes`** with **`patrol_session_id`** | **`patrol_routes.patrol_session_id`** |
+| Server location evidence | Append-only via **`POST /pwa/sync`** (and optional direct **`POST /location-logs`**) | **`location_logs`** are immutable raw evidence — **no** HTTP update/delete (Milestone 13). The SPA does not call **`DELETE /location-logs`**. Local Dexie **`location_logs`** / **`sync_queue`** cleanup remains client-side only and does not remove synced server rows. |
 
 Geofence **auto-completion** for checkpoints: the controller computes distances vs a radius; on entry, **`patrolService.updateCheckpointLog`** PATCHes Laravel **`checkpoint_events`** with **`verified`**, **`detected_at`**, **`detection_type: continuous`**, and provisional **`confidence_score: 80`**. **Resume detection (Milestone 11):** on `visibilitychange` (visible) or `window` `focus`, if a patrol session is active, **`capturePatrolLocationSnapshot`** runs once with **`LOCATION_SOURCE.RESUME`** (5s cooldown; does **not** start/stop the GPS watch), then re-runs geofence checks and optionally **`recordPatrolRoute`**. Resume hits PATCH **`detection_type: resume`**, **`confidence_score: 65`**, and **`verified`** or **`uncertain`** when GPS accuracy is poor. Already-verified checkpoints are skipped. Per-event lat/lng are not persisted on the server — GPS remains in **`location_logs`** / **`patrol_routes`**.
 
@@ -1755,31 +1760,69 @@ Geofence **auto-completion** for checkpoints: the controller computes distances 
 
 **Toasts:** suspicious checkpoint, patrol completed/aborted, validation completed, large GPS gap (>300s between route points on detail map).
 
-**Map:** `PatrolRouteMap` incrementally appends polyline points on live `PatrolRouteUpdated` (preserves zoom after initial fit).
+**Map:** `PatrolRouteMap` incrementally appends polyline points on live `PatrolRouteUpdated` (preserves zoom after initial fit). After validation, overlays **suspicious segments** from `anomalies.items` (backend `POST …/validate` or `PatrolValidationCompleted.validation`).
 
 **Run Reverb locally:** `php artisan reverb:start` (backend) with `BROADCAST_CONNECTION=reverb`.
 
-### Patrol monitoring dashboard (Milestone 3 + 4)
+### Patrol monitoring dashboard (Milestone 3 + 4 + 10 + 11)
 
 **Module:** `src/feature/patrol-monitoring/` — view → controller → repository → `patrolMonitoringService`.
 
 | File | Role |
 |------|------|
 | `views/PatrolMonitoringDashboard.jsx` | Stats cards, filters, session table, pagination |
-| `views/PatrolSessionDetail.jsx` | Session info, summary, **patrol route map**, checkpoint events, **Re-run Validation** |
+| `views/PatrolSessionDetail.jsx` | Session info, summary, **patrol route map**, **replay controls**, checkpoint events, **Re-run Validation** |
 | `controllers/usePatrolMonitoringController.js` | List loading, filters, summary prefetch for completed rows |
-| `controllers/usePatrolSessionDetailController.js` | Detail load; validation + reload summary/events/**routes** |
+| `controllers/usePatrolSessionDetailController.js` | Detail load; validation + reload summary/events/**routes**; stores `anomalies`, `selectedAnomaly`, `showAnomalies` from validation result |
 | `datasources/patrolMonitoringService.js` | Laravel API adapter (401/403/422/409/5xx messages) |
 | `components/PatrolSessionTable.jsx` | Dashboard table |
 | `components/PatrolStatusChip.jsx` | Status chips (patrol / checkpoint / confidence) |
 | `components/PatrolConfidenceCard.jsx` | Summary confidence display |
 | `components/CheckpointStatusSummary.jsx` | Verified / suspicious / uncertain / rejected counts |
-| `components/PatrolRouteMap.jsx` | Leaflet map: trail, breadcrumbs, checkpoints, start/end, GPS gaps |
-| `components/MapLegend.jsx` | Map color legend |
+| `components/PatrolRouteMap.jsx` | Leaflet map: trail, breadcrumbs, checkpoints, start/end, GPS gaps, **suspicious segment overlays** |
+| `components/PatrolAnomalyList.jsx` | Clickable list of validation anomalies (type, severity, time range); focuses map segment |
+| `components/MapLegend.jsx` | Map color legend (route, gaps, checkpoints, **anomaly types**) |
+| `utils/patrolAnomalyUtils.js` | Normalizes `anomalies.items`, popup HTML, map styles, severity counts |
+| `controllers/usePatrolReplayController.js` | Replay playback state (play/pause/seek/speed) over sorted `patrol_routes` |
+| `components/PatrolReplayControls.jsx` | MUI replay toolbar (play, stop, slider, speed, time/coords) |
+| `utils/patrolReplayUtils.js` | Route sort by `recorded_at`, step delay cap, checkpoint/anomaly timeline helpers |
 
 **Dashboard:** `GET /patrol-sessions` with server pagination; optional `status` and `zone_id` filters; client search on guard/zone name (loads up to 100 rows when searching). Stats use lightweight `per_page=1` meta totals. Suspicious/uncertain headline counts come from `GET /checkpoint-events?status=…` totals.
 
 **Detail:** Loads session, summary, checkpoint events, and patrol routes (`GET /patrol-routes?patrol_session_id={id}`). **Patrol route map** (between summary and checkpoint table) uses Leaflet from CDN (`index.html`); shows checkpoint markers by status color, polyline trail ordered by `recorded_at`, breadcrumb dots, start/end pins, and dashed **GPS gap** segments when consecutive route points differ by **> 30s**. Auto-fits bounds to routes + checkpoints. Empty state: *"No patrol route data available."* **Re-run Validation** calls `POST /patrol-sessions/{id}/validate` (backend authoritative — same engine as guard stop flow), then refreshes summary, events, and routes. Failures show an alert without crashing the page.
+
+#### Suspicious segment visualization (Milestone 10)
+
+**Data source:** `validationResult.anomalies.items` from `POST /patrol-sessions/{id}/validate` (not a separate GET). The controller extracts items via `extractAnomalyItems()` and passes them to the map and list. Realtime: `PatrolValidationCompleted` includes the full validation payload when broadcast; the detail handler updates anomalies the same way as **Re-run Validation**.
+
+**Anomaly types (map styling):**
+
+| Backend `type` | Map overlay | Color |
+|----------------|-------------|-------|
+| `speed_anomaly` | Dashed polyline between logs | Red `#dc2626` |
+| `gps_jump` | Dashed polyline | Purple `#9333ea` |
+| `poor_accuracy` | Dashed segment (segment bounds) | Orange `#ea580c` |
+| `timestamp_issue` | Circle marker (point or segment) | Dark `#1e293b` |
+
+Each overlay has a Leaflet popup: type, severity, message, time range, distance/speed when provided by the backend.
+
+**UX:** After validation, a **Suspicious movement** panel appears beside the map on large screens (below on mobile). Empty list shows *"No suspicious movement detected."* When items exist, shows count plus major/minor chips; clicking a row focuses the map bounds and opens the popup. `MapLegend` documents GPS gaps and all four anomaly types. Anomalies are **not** streamed live during patrol — only after validation completes.
+
+**Relation to backend:** Coordinates come from `location_logs` used by `PatrolValidationService` (same anti-cheat rules as checkpoint integrity: speed **> 41.67 m/s**, GPS jump **> 100 m** in **≤ 5 s**, accuracy **> 50 m**, timestamp issues). Route polyline uses `patrol_routes` breadcrumbs; anomaly overlays use validation log coordinates (typically aligned after PWA sync).
+
+#### Patrol replay (Milestone 11)
+
+**Data source:** `GET /patrol-routes?patrol_session_id={id}` (no new backend endpoint). Routes are sorted client-side by `recorded_at` before playback.
+
+**Availability:** Replay is enabled only when session `status` is **`completed`** or **`aborted`**. Active sessions show *"Replay available after patrol is completed."*
+
+**Controller:** `usePatrolReplayController` — state: `isPlaying`, `currentIndex`, `speedMultiplier` (0.5×, 1×, 2×, 5×, 10×), `currentRoutePoint`, `replayProgress` (0–100%), `replayTime`, `replayFinished`. Methods: `play`, `pause`, `stop`/`reset`, `seek(index | 0–1 fraction)`, `setSpeedMultiplier`.
+
+**Timing:** Step delay uses delta between consecutive `recorded_at` values divided by speed multiplier, capped at **1500 ms** per step (long GPS gaps do not stall replay). Missing timestamps use a default step interval. Requires **≥ 2** route points.
+
+**Map (`PatrolRouteMap` replay props):** `replayPoint`, `replayActive`, `replayProgressIndex`, `highlightedCheckpointIds`. During replay: green **traversed** polyline, dashed gray **remaining** polyline, cyan **guard** marker; base trail dimmed. Does **not** re-fit bounds on each step (initial fit only). Live realtime route append and anomaly overlays remain intact.
+
+**Timeline UX:** Checkpoints with `detected_at` ≤ current replay time are emphasized (larger marker, gold ring). When replay time overlaps a validation anomaly window, `PatrolReplayControls` shows a warning chip (e.g. *"Anomaly at current segment: speed anomaly"*).
 
 **Map library:** No npm `leaflet` package — reuses global **`window.L`** (Leaflet 1.9.4 CDN in `index.html`), same pattern as `feature/management-checkpoint/components/LeafletMap.jsx`.
 
@@ -1805,7 +1848,9 @@ Geofence **auto-completion** for checkpoints: the controller computes distances 
 | `hooks/usePwaInstallPrompt.js` | Install prompt state + safe media-query listeners |
 | `layout/MainLayout/Sidebar/SidebarPwaInstall.jsx` | Install button UI + optional mobile debug logs |
 | `App.jsx` | Global **`NetworkSnackbar`** |
-| `public/push-handlers.js` | Workbox **`importScripts`**: Web Push + Background **`sync`** → client **`PWA_SYNC_REQUEST`** |
+| `public/push-handlers.js` | Workbox **`importScripts`**: inbound Web Push display, **`notificationclick`** deep links, Background **`sync`** → **`PWA_SYNC_REQUEST`** |
+| `pwa/pushNotificationService.js` | Subscribe/unsubscribe + **`sendTestNotification()`** |
+| `feature/patrol/components/PatrolPwaStatusPanel.jsx` | Push permission/subscription UI + test button |
 | `pwa/db.js`, `pwa/locationLogService.js`, `pwa/syncService.js`, `pwa/backgroundSyncService.js`, `pwa/useNetworkStatus.js`, `pwa/geolocationService.js` | Offline storage, sync POST (**`/pwa/sync`**), Background Sync registration, connectivity hook, browser geo primitives |
 | `feature/patrol/services/geolocationService.js` | Patrol GPS orchestration + **`saveLocationLog`** |
 | `feature/patrol/controllers/usePatrolController.js` | Patrol workflow; sole starter/stopper of patrol GPS (not raw **`navigator.geolocation`**) |
@@ -1845,4 +1890,4 @@ Geofence **auto-completion** for checkpoints: the controller computes distances 
 
 ---
 
-_Last updated: document revised for Milestone 8 **checkpoint management UI**, Milestone 7 **logout flow** (Profile menu, `clearAuthSession`, Reverb disconnect, cross-tab sign-out), Milestone 6 **role-based route protection** (`RoleProtectedRoute`, role menus, `/patrol`, `/forbidden`), Milestone 5 **realtime patrol monitoring**, Milestone 4 **patrol route map visualization**, Milestone 3 **admin patrol monitoring dashboard**, Milestone 2 **frontend validation integration** (stop patrol → sync → validate → summary), backend Milestone 1 validation engine, Milestone 18 **sync conflict handling** (`resultStatus`, 409/422/duplicate), Milestone 17 **service worker caching**, Milestone 16 **Background Sync**, patrol **`patrolId`** + **`POST /api/pwa/sync`**, **`PatrolPwaStatusPanel`**, and PWA IndexedDB/sync. **`feature/patrol`** is the Laravel-aligned guard reference. Keep this file in sync whenever routing, authentication, API contracts, feature modules, PWA settings, or environment variables change. Source files remain the source of truth._
+_Last updated: document revised for Milestone 11 **patrol replay** on session detail, Milestone 10 **suspicious segment visualization** on patrol monitoring map, Milestone 9 **outbound Web Push** (patrol triggers, test endpoint, SW click routing), Milestone 8 **checkpoint management UI**, Milestone 7 **logout flow** (Profile menu, `clearAuthSession`, Reverb disconnect, cross-tab sign-out), Milestone 6 **role-based route protection** (`RoleProtectedRoute`, role menus, `/patrol`, `/forbidden`), Milestone 5 **realtime patrol monitoring**, Milestone 4 **patrol route map visualization**, Milestone 3 **admin patrol monitoring dashboard**, Milestone 2 **frontend validation integration** (stop patrol → sync → validate → summary), backend Milestone 1 validation engine, Milestone 18 **sync conflict handling** (`resultStatus`, 409/422/duplicate), Milestone 17 **service worker caching**, Milestone 16 **Background Sync**, patrol **`patrolId`** + **`POST /api/pwa/sync`**, **`PatrolPwaStatusPanel`**, and PWA IndexedDB/sync. **`feature/patrol`** is the Laravel-aligned guard reference. Keep this file in sync whenever routing, authentication, API contracts, feature modules, PWA settings, or environment variables change. Source files remain the source of truth._

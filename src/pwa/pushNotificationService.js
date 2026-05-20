@@ -111,6 +111,15 @@ export async function subscribeToPushNotifications() {
   return { subscription, server: response?.data };
 }
 
+export async function sendTestNotification(payload = {}) {
+  const response = await api.post('/push-notifications/test', {
+    title: payload.title ?? 'Test notification',
+    body: payload.body ?? 'This is a test push notification.'
+  });
+
+  return response?.data;
+}
+
 export async function unsubscribeFromPushNotifications() {
   const subscription = await getExistingPushSubscription();
 

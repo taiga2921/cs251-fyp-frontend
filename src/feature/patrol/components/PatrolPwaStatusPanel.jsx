@@ -6,6 +6,7 @@ import {
   getExistingPushSubscription,
   getNotificationPermission,
   isPushNotificationSupported,
+  sendTestNotification,
   subscribeToPushNotifications,
   unsubscribeFromPushNotifications
 } from 'pwa/pushNotificationService';
@@ -156,6 +157,22 @@ export default function PatrolPwaStatusPanel({ patrolId, trackingActive }) {
     }
   };
 
+  const handleSendTestNotification = async () => {
+    try {
+      setPushBusy(true);
+      setPushMessage('');
+      const result = await sendTestNotification();
+      if (result?.success === false) {
+        throw new Error(result?.message || 'Test notification failed');
+      }
+      setPushMessage('Test notification sent. Check your device notifications.');
+    } catch (error) {
+      setPushMessage(error?.message || 'Failed to send test notification');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
   const handleDisableNotifications = async () => {
     try {
       setPushBusy(true);
@@ -268,10 +285,27 @@ export default function PatrolPwaStatusPanel({ patrolId, trackingActive }) {
           >
             Disable Notifications
           </Button>
+          <Button
+            variant="text"
+            size="small"
+            onClick={handleSendTestNotification}
+            disabled={!pushSupported || pushBusy || !pushSubscribed || notificationPermission !== 'granted'}
+          >
+            Send Test Notification
+          </Button>
         </Stack>
 
         {pushMessage ? (
-          <Alert severity={pushMessage.includes('enabled') || pushMessage.includes('disabled') ? 'success' : 'warning'} sx={{ mt: 1.5 }}>
+          <Alert
+            severity={
+              pushMessage.includes('enabled') ||
+              pushMessage.includes('disabled') ||
+              pushMessage.includes('Test notification sent')
+                ? 'success'
+                : 'warning'
+            }
+            sx={{ mt: 1.5 }}
+          >
             {pushMessage}
           </Alert>
         ) : null}

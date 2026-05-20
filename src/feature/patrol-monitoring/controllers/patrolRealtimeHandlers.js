@@ -149,6 +149,7 @@ export function handleSessionRealtimeEvent(
       });
       void loadSummary();
       void loadCheckpointEvents();
+      // Full validation payload (incl. anomalies.items) is broadcast; if absent, summary/events refresh only.
       break;
     }
     default:

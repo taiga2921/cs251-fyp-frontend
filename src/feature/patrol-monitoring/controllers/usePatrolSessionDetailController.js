@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { emitPatrolRealtimeNotification } from 'services/realtime/patrolRealtimeNotifier';
 import { usePatrolRealtime } from 'services/realtime/usePatrolRealtime';
+import { extractAnomalyItems } from '../utils/patrolAnomalyUtils';
 import { handleSessionRealtimeEvent } from './patrolRealtimeHandlers';
 
 export const usePatrolSessionDetailController = (repository) => {
@@ -14,6 +15,9 @@ export const usePatrolSessionDetailController = (repository) => {
   const [checkpointEvents, setCheckpointEvents] = useState([]);
   const [patrolRoutes, setPatrolRoutes] = useState([]);
   const [validationResult, setValidationResult] = useState(null);
+  const [anomalies, setAnomalies] = useState([]);
+  const [selectedAnomaly, setSelectedAnomaly] = useState(null);
+  const [showAnomalies, setShowAnomalies] = useState(true);
 
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -172,6 +176,12 @@ export const usePatrolSessionDetailController = (repository) => {
     loadCheckpointEventsRef.current = loadCheckpointEvents;
   }, [loadSummary, loadCheckpointEvents]);
 
+  const applyValidationResult = useCallback((result) => {
+    setValidationResult(result);
+    setAnomalies(extractAnomalyItems(result));
+    setSelectedAnomaly(null);
+  }, []);
+
   const handleRealtimeEvent = useCallback(
     ({ name, payload }) => {
       handleSessionRealtimeEvent(
@@ -181,7 +191,7 @@ export const usePatrolSessionDetailController = (repository) => {
           setSession,
           setPatrolRoutes,
           setCheckpointEvents,
-          setValidationResult,
+          setValidationResult: applyValidationResult,
           setSummary,
           loadSummary: () => loadSummaryRef.current(),
           loadCheckpointEvents: () => loadCheckpointEventsRef.current(),
@@ -189,7 +199,7 @@ export const usePatrolSessionDetailController = (repository) => {
         }
       );
     },
-    [patrolSessionId, queueRoutePoint]
+    [patrolSessionId, queueRoutePoint, applyValidationResult]
   );
 
   const { isConnected, connectionState, isRealtimeEnabled } = usePatrolRealtime({
@@ -219,7 +229,7 @@ export const usePatrolSessionDetailController = (repository) => {
       setValidationMessage(null);
 
       const result = await repository.validatePatrolSession(patrolSessionId);
-      setValidationResult(result);
+      applyValidationResult(result);
       setValidationMessage('Validation completed. Summary and checkpoint events refreshed.');
 
       await Promise.all([loadSummary(), loadCheckpointEvents(), loadPatrolRoutes()]);
@@ -242,6 +252,11 @@ export const usePatrolSessionDetailController = (repository) => {
     checkpointEvents,
     patrolRoutes,
     validationResult,
+    anomalies,
+    selectedAnomaly,
+    showAnomalies,
+    setSelectedAnomaly,
+    setShowAnomalies,
     loading,
     summaryLoading,
     eventsLoading,

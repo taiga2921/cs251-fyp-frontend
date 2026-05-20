@@ -3,6 +3,11 @@ import PropTypes from 'prop-types';
 import { Alert, Box, CircularProgress, Typography } from '@mui/material';
 
 import MapLegend from './MapLegend';
+import {
+  anomalyToLatLngs,
+  buildAnomalyPopupHtml,
+  getAnomalyMapStyle
+} from '../utils/patrolAnomalyUtils';
 
 const GAP_THRESHOLD_SECONDS = 30;
 const LARGE_GAP_SECONDS = 300;
@@ -57,6 +62,21 @@ function checkpointColor(status) {
   return CHECKPOINT_COLORS[key] ?? CHECKPOINT_COLORS.pending;
 }
 
+function createGuardReplayIcon(L) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:18px;height:18px;
+      background:#0ea5e9;
+      border:3px solid #fff;
+      border-radius:50%;
+      box-shadow:0 2px 8px rgba(14,165,233,0.6);
+    "></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
+  });
+}
+
 function createPinIcon(L, label, color) {
   return L.divIcon({
     className: '',
@@ -86,6 +106,13 @@ function clearLayers(map, layers) {
 export default function PatrolRouteMap({
   routes = [],
   checkpointEvents = [],
+  anomalies = [],
+  selectedAnomaly = null,
+  showAnomalies = true,
+  replayPoint = null,
+  replayActive = false,
+  replayProgressIndex = 0,
+  highlightedCheckpointIds = [],
   loading = false,
   error = null,
   onLargeGapDetected
@@ -97,8 +124,17 @@ export default function PatrolRouteMap({
   const startMarkerRef = useRef(null);
   const endMarkerRef = useRef(null);
   const checkpointLayerMapRef = useRef(new Map());
+  const anomalyLayerMapRef = useRef(new Map());
+  const replayTraversedRef = useRef(null);
+  const replayRemainingRef = useRef(null);
+  const replayGuardMarkerRef = useRef(null);
   const initialFitDoneRef = useRef(false);
   const prevRoutesKeyRef = useRef('');
+
+  const highlightedCheckpointSet = useMemo(
+    () => new Set(highlightedCheckpointIds ?? []),
+    [highlightedCheckpointIds]
+  );
 
   const sortedRoutes = useMemo(() => {
     return [...routes].sort((a, b) => {
@@ -224,6 +260,50 @@ export default function PatrolRouteMap({
     layersRef.current.push(endMarkerRef.current);
   };
 
+  const renderAnomalyLayers = (L, map) => {
+    anomalyLayerMapRef.current.forEach((layer) => {
+      map.removeLayer(layer);
+    });
+    anomalyLayerMapRef.current.clear();
+
+    if (!showAnomalies || !anomalies.length) {
+      return;
+    }
+
+    anomalies.forEach((item) => {
+      const latLngs = anomalyToLatLngs(item);
+      if (!latLngs?.length) {
+        return;
+      }
+
+      const style = getAnomalyMapStyle(item.type);
+      const isSelected = selectedAnomaly?.id === item.id;
+      const popupHtml = buildAnomalyPopupHtml(item);
+      let layer;
+
+      if (style.isMarker || latLngs.length === 1) {
+        const pt = latLngs[0];
+        layer = L.circleMarker(pt, {
+          radius: isSelected ? 10 : 7,
+          color: style.color,
+          fillColor: isSelected ? style.color : '#fef3c7',
+          fillOpacity: 0.95,
+          weight: isSelected ? 3 : 2
+        }).bindPopup(popupHtml);
+      } else {
+        layer = L.polyline(latLngs, {
+          color: style.color,
+          weight: isSelected ? style.weight + 2 : style.weight,
+          opacity: isSelected ? 1 : 0.85,
+          dashArray: style.dashArray ?? undefined
+        }).bindPopup(popupHtml);
+      }
+
+      layer.addTo(map);
+      anomalyLayerMapRef.current.set(item.id, layer);
+    });
+  };
+
   const syncCheckpointMarkers = (L, map) => {
     const nextIds = new Set(checkpointMarkers.map((cp) => cp.id));
 
@@ -236,17 +316,18 @@ export default function PatrolRouteMap({
 
     checkpointMarkers.forEach((cp) => {
       const color = checkpointColor(cp.status);
+      const emphasized = highlightedCheckpointSet.has(cp.id);
       const existing = checkpointLayerMapRef.current.get(cp.id);
       if (existing) {
         map.removeLayer(existing);
       }
 
       const marker = L.circleMarker([cp.lat, cp.lng], {
-        radius: 10,
-        color: '#ffffff',
+        radius: emphasized ? 14 : 10,
+        color: emphasized ? '#fbbf24' : '#ffffff',
         fillColor: color,
         fillOpacity: 0.95,
-        weight: 3
+        weight: emphasized ? 4 : 3
       })
         .bindPopup(`<strong>${cp.name}</strong><br/>Status: ${cp.status ?? 'pending'}`)
         .addTo(map);
@@ -317,12 +398,81 @@ export default function PatrolRouteMap({
     }
 
     syncCheckpointMarkers(L, map);
+    renderAnomalyLayers(L, map);
     checkpointMarkers.forEach((cp) => boundsPoints.push([cp.lat, cp.lng]));
 
-    if (!initialFitDoneRef.current && boundsPoints.length > 0) {
+    if (!initialFitDoneRef.current && !replayActive && boundsPoints.length > 0) {
       const bounds = L.latLngBounds(boundsPoints);
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 });
       initialFitDoneRef.current = true;
+    }
+  };
+
+  const syncReplayLayers = (L, map) => {
+    if (replayTraversedRef.current) {
+      map.removeLayer(replayTraversedRef.current);
+      replayTraversedRef.current = null;
+    }
+    if (replayRemainingRef.current) {
+      map.removeLayer(replayRemainingRef.current);
+      replayRemainingRef.current = null;
+    }
+    if (replayGuardMarkerRef.current) {
+      map.removeLayer(replayGuardMarkerRef.current);
+      replayGuardMarkerRef.current = null;
+    }
+
+    if (!replayActive || routePoints.length < 2) {
+      if (trailPolylineRef.current) {
+        trailPolylineRef.current.setStyle({ opacity: 0.85, color: '#2563eb' });
+      }
+      return;
+    }
+
+    const safeIndex = Math.max(0, Math.min(replayProgressIndex, routePoints.length - 1));
+    const traversed = routePoints.slice(0, safeIndex + 1);
+    const remaining = routePoints.slice(safeIndex);
+
+    if (trailPolylineRef.current) {
+      trailPolylineRef.current.setStyle({ opacity: 0.35, color: '#94a3b8' });
+    }
+
+    if (traversed.length >= 2) {
+      replayTraversedRef.current = L.polyline(traversed, {
+        color: '#059669',
+        weight: 5,
+        opacity: 0.95
+      }).addTo(map);
+    } else if (traversed.length === 1) {
+      replayTraversedRef.current = L.circleMarker(traversed[0], {
+        radius: 5,
+        color: '#059669',
+        fillColor: '#059669',
+        fillOpacity: 1,
+        weight: 2
+      }).addTo(map);
+    }
+
+    if (remaining.length >= 2) {
+      replayRemainingRef.current = L.polyline(remaining, {
+        color: '#cbd5e1',
+        weight: 3,
+        opacity: 0.7,
+        dashArray: '6, 10'
+      }).addTo(map);
+    }
+
+    const guardPt = replayPoint ? routeToLatLng(replayPoint) : traversed[traversed.length - 1];
+    if (guardPt) {
+      const timeLabel = replayPoint?.recorded_at
+        ? new Date(replayPoint.recorded_at).toLocaleString()
+        : 'Replay position';
+      replayGuardMarkerRef.current = L.marker(guardPt, {
+        icon: createGuardReplayIcon(L),
+        zIndexOffset: 1000
+      })
+        .bindPopup(`<strong>Guard (replay)</strong><br/>${timeLabel}`)
+        .addTo(map);
     }
   };
 
@@ -358,11 +508,14 @@ export default function PatrolRouteMap({
         appendRoutePoint(L, map, sortedRoutes[i], i, sortedRoutes.length);
       }
       syncCheckpointMarkers(L, map);
+      renderAnomalyLayers(L, map);
+      syncReplayLayers(L, map);
     } else {
       if (routesKey !== prevKey) {
         initialFitDoneRef.current = false;
       }
       fullRedraw(L, map);
+      syncReplayLayers(L, map);
     }
 
     prevRoutesKeyRef.current = routesKey;
@@ -372,7 +525,60 @@ export default function PatrolRouteMap({
     }, 100);
 
     return undefined;
-  }, [sortedRoutes, routePoints, gaps, checkpointMarkers, hasMapData, loading, error, routesKey, onLargeGapDetected]);
+  }, [
+    sortedRoutes,
+    routePoints,
+    gaps,
+    checkpointMarkers,
+    anomalies,
+    selectedAnomaly,
+    showAnomalies,
+    hasMapData,
+    loading,
+    error,
+    routesKey,
+    onLargeGapDetected
+  ]);
+
+  useEffect(() => {
+    if (!mapRef.current || !window.L || loading || error) {
+      return undefined;
+    }
+    syncReplayLayers(window.L, mapRef.current);
+    syncCheckpointMarkers(window.L, mapRef.current);
+    return undefined;
+  }, [
+    replayActive,
+    replayProgressIndex,
+    replayPoint,
+    highlightedCheckpointIds,
+    routePoints,
+    loading,
+    error
+  ]);
+
+  useEffect(() => {
+    if (!mapRef.current || !window.L || !selectedAnomaly || replayActive) {
+      return undefined;
+    }
+
+    const latLngs = anomalyToLatLngs(selectedAnomaly);
+    if (!latLngs?.length) {
+      return undefined;
+    }
+
+    const map = mapRef.current;
+    const L = window.L;
+    const bounds = L.latLngBounds(latLngs);
+    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 17 });
+
+    const layer = anomalyLayerMapRef.current.get(selectedAnomaly.id);
+    if (layer?.openPopup) {
+      layer.openPopup();
+    }
+
+    return undefined;
+  }, [selectedAnomaly, replayActive]);
 
   useEffect(() => {
     return () => {
@@ -383,14 +589,18 @@ export default function PatrolRouteMap({
         trailPolylineRef.current = null;
         startMarkerRef.current = null;
         endMarkerRef.current = null;
+        replayTraversedRef.current = null;
+        replayRemainingRef.current = null;
+        replayGuardMarkerRef.current = null;
         checkpointLayerMapRef.current.clear();
+        anomalyLayerMapRef.current.clear();
         initialFitDoneRef.current = false;
         prevRoutesKeyRef.current = '';
       }
     };
   }, []);
 
-  if (loading) {
+  if (loading && !mapRef.current) {
     return (
       <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
         <CircularProgress size={28} />
@@ -411,7 +621,7 @@ export default function PatrolRouteMap({
   }
 
   return (
-    <Box>
+    <Box sx={{ position: 'relative' }}>
       {!hasRouteData ? (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           No patrol route data available. Showing checkpoint locations only.
@@ -428,7 +638,23 @@ export default function PatrolRouteMap({
           zIndex: 0
         }}
       />
-      <MapLegend gapCount={gaps.length} />
+      {loading ? (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: 'rgba(255, 255, 255, 0.55)',
+            borderRadius: 1,
+            pointerEvents: 'none'
+          }}
+        >
+          <CircularProgress size={24} />
+        </Box>
+      ) : null}
+      <MapLegend gapCount={gaps.length} anomalyCount={showAnomalies ? anomalies.length : 0} />
     </Box>
   );
 }
@@ -436,6 +662,13 @@ export default function PatrolRouteMap({
 PatrolRouteMap.propTypes = {
   routes: PropTypes.arrayOf(PropTypes.object),
   checkpointEvents: PropTypes.arrayOf(PropTypes.object),
+  anomalies: PropTypes.arrayOf(PropTypes.object),
+  selectedAnomaly: PropTypes.object,
+  showAnomalies: PropTypes.bool,
+  replayPoint: PropTypes.object,
+  replayActive: PropTypes.bool,
+  replayProgressIndex: PropTypes.number,
+  highlightedCheckpointIds: PropTypes.arrayOf(PropTypes.string),
   loading: PropTypes.bool,
   error: PropTypes.string,
   onLargeGapDetected: PropTypes.func

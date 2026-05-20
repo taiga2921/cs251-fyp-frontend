@@ -1,4 +1,8 @@
 import { useRef } from 'react';
+
+import { usePatrolReplayController } from '../controllers/usePatrolReplayController';
+import PatrolReplayControls from '../components/PatrolReplayControls';
+import { isReplaySessionAllowed } from '../utils/patrolReplayUtils';
 import {
   Alert,
   Box,
@@ -26,6 +30,7 @@ import PatrolStatusChip from '../components/PatrolStatusChip';
 import PatrolConfidenceCard from '../components/PatrolConfidenceCard';
 import CheckpointStatusSummary from '../components/CheckpointStatusSummary';
 import PatrolRouteMap from '../components/PatrolRouteMap';
+import PatrolAnomalyList from '../components/PatrolAnomalyList';
 import PatrolRealtimeSnackbar from '../components/PatrolRealtimeSnackbar';
 
 export default function PatrolSessionDetail() {
@@ -34,6 +39,13 @@ export default function PatrolSessionDetail() {
     repositoryRef.current = new PatrolMonitoringRepository(patrolMonitoringService);
   }
   const controller = usePatrolSessionDetailController(repositoryRef.current);
+  const replayEnabled = isReplaySessionAllowed(controller.session?.status);
+  const replay = usePatrolReplayController({
+    patrolRoutes: controller.patrolRoutes,
+    anomalies: controller.anomalies,
+    checkpointEvents: controller.checkpointEvents,
+    replayEnabled
+  });
 
   if (controller.loading) {
     return (
@@ -164,13 +176,55 @@ export default function PatrolSessionDetail() {
           <Typography variant="h6" gutterBottom>
             Patrol route map
           </Typography>
-          <PatrolRouteMap
-            routes={controller.patrolRoutes}
-            checkpointEvents={controller.checkpointEvents}
-            loading={controller.routesLoading}
-            error={controller.routesError}
-            onLargeGapDetected={controller.handleLargeGapDetected}
+          <PatrolReplayControls
+            replayEnabled={replayEnabled}
+            canReplay={replay.canReplay}
+            hasEnoughPoints={replay.hasEnoughPoints}
+            routeCount={replay.routeCount}
+            isPlaying={replay.isPlaying}
+            replayProgress={replay.replayProgress}
+            replayTime={replay.replayTime}
+            currentRoutePoint={replay.currentRoutePoint}
+            speedMultiplier={replay.speedMultiplier}
+            replayFinished={replay.replayFinished}
+            currentSegmentAnomaly={replay.currentSegmentAnomaly}
+            onPlay={replay.play}
+            onPause={replay.pause}
+            onStop={replay.stop}
+            onSeek={replay.seek}
+            onSpeedChange={replay.setSpeedMultiplier}
           />
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, lg: controller.validationResult ? 8 : 12 }}>
+              <PatrolRouteMap
+                routes={controller.patrolRoutes}
+                checkpointEvents={controller.checkpointEvents}
+                anomalies={controller.anomalies}
+                selectedAnomaly={controller.selectedAnomaly}
+                showAnomalies={controller.showAnomalies}
+                replayPoint={replay.currentRoutePoint}
+                replayActive={replay.replayActive}
+                replayProgressIndex={replay.currentIndex}
+                highlightedCheckpointIds={replay.passedCheckpointIds}
+                loading={controller.routesLoading}
+                error={controller.routesError}
+                onLargeGapDetected={controller.handleLargeGapDetected}
+              />
+            </Grid>
+            {controller.anomalies.length > 0 || controller.validationResult ? (
+              <Grid size={{ xs: 12, lg: 4 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Suspicious movement
+                </Typography>
+                <PatrolAnomalyList
+                  anomalies={controller.anomalies}
+                  selectedAnomalyId={controller.selectedAnomaly?.id ?? null}
+                  showAnomalies={controller.showAnomalies}
+                  onSelectAnomaly={controller.setSelectedAnomaly}
+                />
+              </Grid>
+            ) : null}
+          </Grid>
         </Paper>
 
         <Box>
