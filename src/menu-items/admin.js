@@ -65,12 +65,6 @@ const admin = {
           title: 'Camera',
           type: 'item',
           url: '/admin/management-camera'
-        },
-        {
-          id: 'admin-patrol-monitoring',
-          title: 'Patrol Monitoring',
-          type: 'item',
-          url: '/admin/patrol-monitoring'
         }
       ]
     }

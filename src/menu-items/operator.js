@@ -19,6 +19,13 @@ const operator = {
   type: 'group',
   children: [
     {
+      id: 'operator-patrol-monitoring',
+      title: 'Patrol Monitoring',
+      type: 'item',
+      url: '/admin/patrol-monitoring',
+      icon: icons.IconMapPin2
+    },
+    {
       id: 'operator-patrol',
       title: 'Patrol',
       type: 'collapse',

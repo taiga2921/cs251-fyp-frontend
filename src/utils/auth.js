@@ -9,6 +9,9 @@ export const ROLES = {
 
 const CANONICAL_ROLES = [ROLES.ADMIN, ROLES.SECURITY_OPERATOR, ROLES.GUARD];
 
+/** All authenticated app roles — used for shared routes such as Patrol Home. */
+export const ALL_ROLES = [...CANONICAL_ROLES];
+
 export function getAuthToken() {
   return localStorage.getItem(AUTH_TOKEN_KEY);
 }

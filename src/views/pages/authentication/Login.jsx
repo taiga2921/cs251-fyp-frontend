@@ -42,12 +42,6 @@ export default function Login() {
                 <Box sx={{ width: 1 }}>
                   <AuthLogin />
                 </Box>
-                <Divider sx={{ width: 1 }} />
-                <Stack sx={{ alignItems: 'center' }}>
-                  <Typography component={Link} to="/pages/register" variant="subtitle1" sx={{ textDecoration: 'none' }}>
-                    Don&apos;t have an account?
-                  </Typography>
-                </Stack>
               </Stack>
             </AuthCardWrapper>
           </Box>

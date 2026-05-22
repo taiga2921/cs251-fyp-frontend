@@ -7,7 +7,7 @@ import Loadable from 'ui-component/Loadable';
 import ProtectedRoute from './guards/ProtectedRoute';
 import RoleProtectedRoute from './guards/RoleProtectedRoute';
 import RoleHomeRedirect from './guards/RoleHomeRedirect';
-import { ROLES } from 'utils/auth';
+import { ALL_ROLES, ROLES } from 'utils/auth';
 
 // dashboard routing
 const DashboardDefault = Loadable(lazy(() => import('views/dashboard/Default')));
@@ -52,7 +52,7 @@ const adminOnly = (element) => <RoleProtectedRoute allowedRoles={[ROLES.ADMIN]}>
 const adminOrOperator = (element) => (
   <RoleProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SECURITY_OPERATOR]}>{element}</RoleProtectedRoute>
 );
-const guardOnly = (element) => <RoleProtectedRoute allowedRoles={[ROLES.GUARD]}>{element}</RoleProtectedRoute>;
+const allRoles = (element) => <RoleProtectedRoute allowedRoles={ALL_ROLES}>{element}</RoleProtectedRoute>;
 
 // ==============================|| MAIN ROUTING ||============================== //
 
@@ -85,7 +85,7 @@ const MainRoutes = {
 
     {
       path: 'patrol',
-      element: guardOnly(<GuardPatrol />)
+      element: allRoles(<GuardPatrol />)
     },
     {
       path: 'guard/patrol',

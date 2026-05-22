@@ -2,20 +2,18 @@ import { getAuthUserRole, ROLES } from 'utils/auth';
 
 import dashboard from './dashboard';
 import guard from './guard';
+import operator from './operator';
 import admin from './admin';
+import patrolHome from './patrolHome';
 
-const securityOperatorPatrolMonitoring = {
-  id: 'security-operator',
-  title: 'Monitoring',
-  type: 'group',
-  children: [
-    {
-      id: 'security-operator-patrol-monitoring',
-      title: 'Patrol Monitoring',
-      type: 'item',
-      url: '/admin/patrol-monitoring'
-    }
-  ]
+const OPERATOR_MONITORING_CHILD_IDS = new Set(['operator-patrol-monitoring']);
+
+/**
+ * Operator sidebar for Security Operator — monitoring only (live/history routes are admin-only).
+ */
+const operatorMonitoringMenu = {
+  ...operator,
+  children: operator.children.filter((child) => OPERATOR_MONITORING_CHILD_IDS.has(child.id))
 };
 
 /**
@@ -26,9 +24,9 @@ export function getMenuItemsForRole(role = getAuthUserRole()) {
     case ROLES.GUARD:
       return { items: [guard] };
     case ROLES.SECURITY_OPERATOR:
-      return { items: [securityOperatorPatrolMonitoring] };
+      return { items: [operatorMonitoringMenu, patrolHome] };
     case ROLES.ADMIN:
-      return { items: [dashboard, admin] };
+      return { items: [dashboard, patrolHome, admin, operator] };
     default:
       return { items: [] };
   }

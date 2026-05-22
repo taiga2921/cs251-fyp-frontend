@@ -183,7 +183,7 @@ export default function AuthLogin() {
         {errors.password && <FormHelperText error>{errors.password}</FormHelperText>}
       </CustomFormControl>
 
-      <Grid container sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* <Grid container sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
         <Grid>
           <FormControlLabel
             control={<Checkbox checked={checked} onChange={(event) => setChecked(event.target.checked)} name="checked" color="primary" />}
@@ -195,7 +195,7 @@ export default function AuthLogin() {
             Forgot Password?
           </Typography>
         </Grid>
-      </Grid>
+      </Grid> */}
       {submitError && (
         <Box sx={{ mt: 1 }}>
           <FormHelperText error>{submitError}</FormHelperText>
