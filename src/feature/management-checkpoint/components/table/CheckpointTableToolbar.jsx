@@ -9,7 +9,7 @@ export function CheckpointTableToolbar({
   activeFilter,
   locationTypeFilter,
   zones,
-  zoneFilterDisabled,
+  hideZoneFilter = false,
   onFilterChange,
   onZoneFilterChange,
   onActiveFilterChange,
@@ -39,22 +39,23 @@ export function CheckpointTableToolbar({
           onChange={(e) => onFilterChange(e.target.value)}
           sx={{ minWidth: { xs: '100%', sm: 200 } }}
         />
-        <TextField
-          select
-          label="Zone"
-          size="small"
-          value={zoneFilter}
-          onChange={(e) => onZoneFilterChange(e.target.value)}
-          disabled={zoneFilterDisabled}
-          sx={{ minWidth: { xs: '100%', sm: 160 } }}
-        >
-          <MenuItem value="">All zones</MenuItem>
-          {zones.map((zone) => (
-            <MenuItem key={zone.id} value={zone.id}>
-              {zone.name}
-            </MenuItem>
-          ))}
-        </TextField>
+        {!hideZoneFilter ? (
+          <TextField
+            select
+            label="Zone"
+            size="small"
+            value={zoneFilter}
+            onChange={(e) => onZoneFilterChange(e.target.value)}
+            sx={{ minWidth: { xs: '100%', sm: 160 } }}
+          >
+            <MenuItem value="">All zones</MenuItem>
+            {zones.map((zone) => (
+              <MenuItem key={zone.id} value={zone.id}>
+                {zone.name}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
         <TextField
           select
           label="Status"

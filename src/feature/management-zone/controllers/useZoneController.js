@@ -1,64 +1,53 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export const useZoneController = (repository) => {
   const navigate = useNavigate();
   const [zones, setZones] = useState([]);
-  const [selected, setSelected] = useState([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [totalCount, setTotalCount] = useState(0);
   const [filterText, setFilterText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [feedback, setFeedback] = useState({ type: '', message: '' });
 
-  useEffect(() => {
-    loadZones();
-  }, []);
-
-  const loadZones = async () => {
+  const loadZones = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await repository.getAllZones();
-      setZones(data.data.data);
-    } catch (error) {
-      console.error('Failed to load zones:', error);
+      setError('');
+
+      const payload = await repository.getAllZones({
+        page: page + 1,
+        per_page: rowsPerPage,
+        search: filterText.trim() || undefined,
+        sort: 'latest'
+      });
+
+      const normalized = repository.normalizeZoneListResponse(payload);
+      setZones(normalized.items);
+      setTotalCount(normalized.total);
+    } catch (err) {
+      console.error('Failed to load zones:', err);
+      setError(err?.message || 'Failed to load zones.');
+      setZones([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [repository, page, rowsPerPage, filterText]);
 
-  const handleChangePage = (event, newPage) => {
+  useEffect(() => {
+    loadZones();
+  }, [loadZones]);
+
+  const handleChangePage = (_event, newPage) => {
     setPage(newPage);
   };
 
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
-  };
-
-  const handleSelectAllClick = (event) => {
-    if (event.target.checked) {
-      const newSelected = zones.map((n) => n.id);
-      setSelected(newSelected);
-      return;
-    }
-    setSelected([]);
-  };
-
-  const handleRowClick = (event, id) => {
-    const selectedIndex = selected.indexOf(id);
-    let newSelected = [];
-
-    if (selectedIndex === -1) {
-      newSelected = newSelected.concat(selected, id);
-    } else if (selectedIndex === 0) {
-      newSelected = newSelected.concat(selected.slice(1));
-    } else if (selectedIndex === selected.length - 1) {
-      newSelected = newSelected.concat(selected.slice(0, -1));
-    } else if (selectedIndex > 0) {
-      newSelected = newSelected.concat(selected.slice(0, selectedIndex), selected.slice(selectedIndex + 1));
-    }
-
-    setSelected(newSelected);
   };
 
   const handleFilterChange = (text) => {
@@ -79,39 +68,38 @@ export const useZoneController = (repository) => {
   };
 
   const handleDeleteZone = async (zoneId) => {
-    if (window.confirm('Are you sure you want to delete this zone?')) {
-      try {
-        await repository.deleteZone(zoneId);
-        await loadZones();
-      } catch (error) {
-        console.error('Failed to delete zone:', error);
-        alert('Failed to delete zone');
-      }
+    if (!window.confirm('Are you sure you want to delete this zone?')) return;
+
+    try {
+      await repository.deleteZone(zoneId);
+      setFeedback({ type: 'success', message: 'Zone deleted successfully.' });
+      await loadZones();
+    } catch (err) {
+      console.error('Failed to delete zone:', err);
+      setFeedback({ type: 'error', message: err?.message || 'Failed to delete zone.' });
     }
   };
 
-  const isSelected = (id) => selected.indexOf(id) !== -1;
-
-  const filteredZones = repository.filterZones(zones, filterText);
-  const paginatedZones = repository.paginateZones(filteredZones, page, rowsPerPage);
+  const clearFeedback = () => {
+    setFeedback({ type: '', message: '' });
+  };
 
   return {
-    zones: paginatedZones,
-    filteredCount: filteredZones.length,
-    selected,
+    zones,
+    totalCount,
     page,
     rowsPerPage,
     filterText,
     loading,
-    isSelected,
+    error,
+    feedback,
     handleChangePage,
     handleChangeRowsPerPage,
-    handleSelectAllClick,
-    handleRowClick,
     handleFilterChange,
     handleAddZone,
     handleViewZone,
     handleEditZone,
-    handleDeleteZone
+    handleDeleteZone,
+    clearFeedback
   };
 };

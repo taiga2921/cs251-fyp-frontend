@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Typography } from '@mui/material';
 
 import { DEFAULT_MAP_CENTER } from '../utils/checkpointConstants';
@@ -11,12 +11,14 @@ export default function CheckpointMapPicker({
   longitude,
   radius,
   onCoordinatesChange,
-  coordinateError
+  coordinateError,
+  disabled = false
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const circleRef = useRef(null);
+  const [isMapDragging, setIsMapDragging] = useState(false);
 
   const lat = Number.isFinite(latitude) ? latitude : DEFAULT_MAP_CENTER.latitude;
   const lng = Number.isFinite(longitude) ? longitude : DEFAULT_MAP_CENTER.longitude;
@@ -30,19 +32,24 @@ export default function CheckpointMapPicker({
     const L = window.L;
 
     if (!mapRef.current) {
-      mapRef.current = L.map(mapContainerRef.current, { scrollWheelZoom: true }).setView([lat, lng], 16);
+      mapRef.current = L.map(mapContainerRef.current, {
+        scrollWheelZoom: !disabled,
+        dragging: !disabled
+      }).setView([lat, lng], 16);
+
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       }).addTo(mapRef.current);
 
       const emitCoords = (nextLat, nextLng) => {
+        if (disabled) return;
         onCoordinatesChange?.({
           latitude: Number(nextLat.toFixed(7)),
           longitude: Number(nextLng.toFixed(7))
         });
       };
 
-      markerRef.current = L.marker([lat, lng], { draggable: true }).addTo(mapRef.current);
+      markerRef.current = L.marker([lat, lng], { draggable: !disabled }).addTo(mapRef.current);
 
       markerRef.current.on('dragend', () => {
         const pos = markerRef.current.getLatLng();
@@ -53,6 +60,7 @@ export default function CheckpointMapPicker({
       });
 
       mapRef.current.on('click', (event) => {
+        if (disabled) return;
         const { lat: clickLat, lng: clickLng } = event.latlng;
         markerRef.current.setLatLng([clickLat, clickLng]);
         emitCoords(clickLat, clickLng);
@@ -60,10 +68,28 @@ export default function CheckpointMapPicker({
           circleRef.current.setLatLng([clickLat, clickLng]);
         }
       });
+
+      mapRef.current.on('dragstart', () => setIsMapDragging(true));
+      mapRef.current.on('dragend', () => setIsMapDragging(false));
+    }
+
+    if (mapRef.current) {
+      if (disabled) {
+        mapRef.current.dragging.disable();
+        mapRef.current.scrollWheelZoom.disable();
+      } else {
+        mapRef.current.dragging.enable();
+        mapRef.current.scrollWheelZoom.enable();
+      }
     }
 
     if (markerRef.current) {
       markerRef.current.setLatLng([lat, lng]);
+      if (disabled) {
+        markerRef.current.dragging?.disable();
+      } else {
+        markerRef.current.dragging?.enable();
+      }
     }
 
     if (circleRef.current) {
@@ -82,7 +108,7 @@ export default function CheckpointMapPicker({
     mapRef.current.setView([lat, lng], mapRef.current.getZoom());
 
     return undefined;
-  }, [lat, lng, radiusM, onCoordinatesChange]);
+  }, [lat, lng, radiusM, onCoordinatesChange, disabled]);
 
   useEffect(() => {
     return () => {
@@ -106,17 +132,33 @@ export default function CheckpointMapPicker({
   return (
     <Box>
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-        Click the map or drag the marker to set coordinates. The circle shows the checkpoint radius.
+        Click the map or drag the marker to set coordinates. Drag the map to pan. The circle shows the checkpoint
+        radius.
       </Typography>
       <Box
         ref={mapContainerRef}
+        className={isMapDragging ? 'checkpoint-map-picker checkpoint-map-picker--dragging' : 'checkpoint-map-picker'}
         sx={{
           height: 360,
           width: '100%',
           borderRadius: 2,
           border: '1px solid',
           borderColor: coordinateError ? 'error.main' : 'divider',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          opacity: disabled ? 0.6 : 1,
+          pointerEvents: disabled ? 'none' : 'auto',
+          '& .leaflet-container': {
+            cursor: 'pointer'
+          },
+          '&.checkpoint-map-picker--dragging .leaflet-container': {
+            cursor: 'grabbing'
+          },
+          '& .leaflet-marker-icon': {
+            cursor: 'grab'
+          },
+          '& .leaflet-marker-dragging': {
+            cursor: 'grabbing'
+          }
         }}
       />
       {coordinateError ? (

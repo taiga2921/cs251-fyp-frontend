@@ -27,6 +27,7 @@ export default function DetailCard({
   avatar,
   secondary,
   onBack,
+  headerActions,
   shadow,
   sx = {},
   title,
@@ -55,9 +56,14 @@ export default function DetailCard({
           avatar={avatar}
           title={title}
           action={
-            <Button variant="outlined" color="secondary" onClick={onBack} startIcon={<BackIcon size={18} />}>
-              Back
-            </Button>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {headerActions}
+              {onBack ? (
+                <Button variant="outlined" color="secondary" onClick={onBack} startIcon={<BackIcon size={18} />}>
+                  Back
+                </Button>
+              ) : null}
+            </Box>
           }
         />
       )}
@@ -92,6 +98,7 @@ DetailCard.propTypes = {
   avatar: PropTypes.node,
   secondary: PropTypes.any,
   onBack: PropTypes.func,
+  headerActions: PropTypes.node,
   shadow: PropTypes.string,
   sx: PropTypes.object,
   title: PropTypes.oneOfType([PropTypes.string, PropTypes.node]),

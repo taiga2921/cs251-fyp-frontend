@@ -3,16 +3,18 @@ import { Paper, Table, TableBody, TableCell, TableContainer, TableRow, Typograph
 import { CheckpointTableHeader } from './CheckpointTableHeader';
 import { CheckpointTableRow } from './CheckpointTableRow';
 
-export function CheckpointTable({ checkpoints, onView, onEdit, onDelete }) {
+export function CheckpointTable({ checkpoints, hideZoneColumn = false, onView, onEdit, onDelete }) {
+  const columnCount = hideZoneColumn ? 8 : 9;
+
   return (
     <Paper sx={{ width: '100%', mb: 2, borderRadius: 2, overflow: 'hidden' }} elevation={1}>
       <TableContainer sx={{ overflowX: 'auto' }}>
-        <Table sx={{ minWidth: 960 }}>
-          <CheckpointTableHeader />
+        <Table sx={{ minWidth: hideZoneColumn ? 860 : 960 }}>
+          <CheckpointTableHeader hideZoneColumn={hideZoneColumn} />
           <TableBody>
             {checkpoints.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={columnCount} align="center" sx={{ py: 4 }}>
                   <Typography variant="body2" color="text.secondary">
                     No checkpoints found.
                   </Typography>
@@ -23,6 +25,7 @@ export function CheckpointTable({ checkpoints, onView, onEdit, onDelete }) {
                 <CheckpointTableRow
                   key={checkpoint.id}
                   checkpoint={checkpoint}
+                  hideZoneColumn={hideZoneColumn}
                   onView={onView}
                   onEdit={onEdit}
                   onDelete={onDelete}

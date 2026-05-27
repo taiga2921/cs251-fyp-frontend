@@ -24,9 +24,9 @@ export function getMenuItemsForRole(role = getAuthUserRole()) {
     case ROLES.GUARD:
       return { items: [guard] };
     case ROLES.SECURITY_OPERATOR:
-      return { items: [operatorMonitoringMenu, patrolHome] };
+      return { items: [patrolHome, operatorMonitoringMenu] };
     case ROLES.ADMIN:
-      return { items: [dashboard, patrolHome, admin, operator] };
+      return { items: [dashboard, patrolHome, operator, admin] };
     default:
       return { items: [] };
   }

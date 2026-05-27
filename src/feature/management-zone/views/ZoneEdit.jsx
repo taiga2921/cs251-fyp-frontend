@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { Box, Grid, useTheme, useMediaQuery } from '@mui/material';
+import { Alert, Box, CircularProgress, Grid } from '@mui/material';
 import { IconMap as MapIcon } from '@tabler/icons-react';
 import DetailCard from 'ui-component/cards/DetailCard';
 
@@ -13,23 +14,34 @@ import { ZoneRepository } from '../repositories/zoneRepository';
 import zoneService from '../datasources/zoneService';
 import { useZoneFormController } from '../controllers/useZoneFormController';
 
-export default function ZoneAdd() {
+export default function ZoneEdit() {
   const { zoneId } = useParams();
-  // Initialize dependencies using dependency injection pattern
-  const repository = new ZoneRepository(zoneService);
+  const repository = useMemo(() => new ZoneRepository(zoneService), []);
   const controller = useZoneFormController(repository, zoneId);
 
-  // Responsive design hooks
-  // const theme = useTheme();
-  // const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  if (controller.initialLoading) {
+    return (
+      <DetailCard title="Edit Zone Details" avatar={<MapIcon size={24} />} onBack={controller.handleCancel}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress size={48} />
+        </Box>
+      </DetailCard>
+    );
+  }
 
   return (
     <>
       <DetailCard title="Edit Zone Details" avatar={<MapIcon size={24} />} onBack={controller.handleCancel}>
         <Box sx={{ mx: 'auto' }} component="form" onSubmit={controller.handleSubmit}>
-          <SectionHeader title="Zone Profile"></SectionHeader>
+          {controller.submitError ? (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {controller.submitError}
+            </Alert>
+          ) : null}
+
+          <SectionHeader title="Zone Profile" />
           <Grid container spacing={3}>
-            <Grid size={{ xs: 12, md: 4 }}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <FieldContainer
                 label="Zone Name"
                 name="name"
@@ -37,30 +49,33 @@ export default function ZoneAdd() {
                 onChange={controller.handleChange('name')}
                 error={!!controller.errors.name}
                 helperText={controller.errors.name}
-                placeholder="Enter name"
-              ></FieldContainer>
+                placeholder="Enter zone name"
+                required
+              />
             </Grid>
 
-            <Grid size={{ xs: 12, md: 4 }}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <FieldContainer
                 label="Description"
                 name="description"
                 value={controller.formData.description}
                 onChange={controller.handleChange('description')}
                 error={!!controller.errors.description}
-                helperText={controller.errors.description}
+                helperText={controller.errors.description || 'Optional'}
                 placeholder="Enter description"
-              ></FieldContainer>
+                multiline
+                minRows={2}
+              />
             </Grid>
 
-            <Grid size={{ xs: 12, md: 12 }}>
-              <SubmitButton text1="Update Zone" text2="Updating..." controller={controller}></SubmitButton>
+            <Grid size={{ xs: 12 }}>
+              <SubmitButton text1="Update Zone" text2="Updating..." controller={controller} />
             </Grid>
           </Grid>
         </Box>
       </DetailCard>
 
-      <SuccessDialog controller={controller} msg="Zone updated successfully! Redirecting to zone view page..."></SuccessDialog>
+      <SuccessDialog controller={controller} msg="Zone updated successfully! Redirecting..." />
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { DEFAULT_MAP_CENTER, RECOMMENDED_RADIUS } from '../utils/checkpointConstants';
+import { DEFAULT_MAP_CENTER, RECOMMENDED_RADIUS, normalizeLocationType } from '../utils/checkpointConstants';
 import {
   buildCheckpointPayload,
   extractBackendErrorMessage,
@@ -20,15 +20,22 @@ const defaultFormData = (zoneId = '') => ({
   is_active: true
 });
 
+const resolveZoneId = (...candidates) => {
+  for (const value of candidates) {
+    if (value) return value;
+  }
+  return '';
+};
+
 export const useCheckpointFormController = (repository, checkpointId = null) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const initialZoneId = location.state?.zoneId ?? '';
+  const routeZoneId = location.state?.zoneId ?? '';
 
   const isEdit = Boolean(checkpointId);
-  const [formData, setFormData] = useState(() => defaultFormData(initialZoneId));
-  const [zones, setZones] = useState([]);
-  const [zonesLoading, setZonesLoading] = useState(true);
+  const [formData, setFormData] = useState(() => defaultFormData(routeZoneId));
+  const [zoneContext, setZoneContext] = useState(null);
+  const [zoneLoading, setZoneLoading] = useState(Boolean(routeZoneId));
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEdit);
   const [errors, setErrors] = useState({});
@@ -36,20 +43,45 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [savedCheckpointId, setSavedCheckpointId] = useState(null);
 
-  const noZones = !zonesLoading && zones.length === 0;
+  const activeZoneId = resolveZoneId(formData.zone_id, zoneContext?.id, routeZoneId);
+  const missingZoneContext = !zoneLoading && !initialLoading && !activeZoneId;
+  const zoneName = zoneContext?.name ?? '';
 
-  const loadZones = useCallback(async () => {
-    try {
-      setZonesLoading(true);
-      const payload = await repository.getZones();
-      setZones(repository.normalizeZonesList(payload));
-    } catch (err) {
-      console.error('Failed to load zones:', err);
-      setSubmitError(err?.message || 'Failed to load zones.');
-    } finally {
-      setZonesLoading(false);
-    }
-  }, [repository]);
+  const navigateToZoneDetails = useCallback(
+    (zoneId) => {
+      const targetZoneId = resolveZoneId(zoneId, activeZoneId, routeZoneId);
+      if (targetZoneId) {
+        navigate(`/admin/management-zone/view/${targetZoneId}`);
+        return;
+      }
+      navigate('/admin/management-checkpoint');
+    },
+    [navigate, activeZoneId, routeZoneId]
+  );
+
+  const loadZoneContext = useCallback(
+    async (zoneId) => {
+      if (!zoneId) {
+        setZoneContext(null);
+        setZoneLoading(false);
+        return;
+      }
+
+      try {
+        setZoneLoading(true);
+        const response = await repository.getZoneById(zoneId);
+        const zone = response?.data ?? response;
+        setZoneContext(zone ?? null);
+      } catch (err) {
+        console.error('Failed to load zone:', err);
+        setZoneContext(null);
+        setSubmitError(err?.message || 'Failed to load zone context.');
+      } finally {
+        setZoneLoading(false);
+      }
+    },
+    [repository]
+  );
 
   const loadCheckpoint = useCallback(async () => {
     if (!checkpointId) return;
@@ -59,32 +91,45 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
       const cp = response?.data ?? response;
       if (!cp) return;
 
+      const zoneId = resolveZoneId(cp.zone_id, cp.zone?.id, routeZoneId);
+
       setFormData({
-        zone_id: cp.zone_id ?? '',
+        zone_id: zoneId,
         name: cp.name ?? '',
         latitude: cp.latitude ?? '',
         longitude: cp.longitude ?? '',
         radius: cp.radius ?? RECOMMENDED_RADIUS.outdoor,
-        location_type: cp.location_type ?? 'outdoor',
+        location_type: normalizeLocationType(cp.location_type),
         is_active: cp.is_active !== false
       });
+
+      if (zoneId) {
+        await loadZoneContext(zoneId);
+      } else {
+        setZoneLoading(false);
+      }
     } catch (err) {
       console.error('Failed to load checkpoint:', err);
       setSubmitError(err?.message || 'Failed to load checkpoint.');
+      setZoneLoading(false);
     } finally {
       setInitialLoading(false);
     }
-  }, [repository, checkpointId]);
-
-  useEffect(() => {
-    loadZones();
-  }, [loadZones]);
+  }, [repository, checkpointId, routeZoneId, loadZoneContext]);
 
   useEffect(() => {
     if (isEdit) {
       loadCheckpoint();
+      return;
     }
-  }, [isEdit, loadCheckpoint]);
+
+    if (routeZoneId) {
+      setFormData((prev) => ({ ...prev, zone_id: routeZoneId }));
+      loadZoneContext(routeZoneId);
+    } else {
+      setZoneLoading(false);
+    }
+  }, [isEdit, loadCheckpoint, routeZoneId, loadZoneContext]);
 
   useEffect(() => {
     let timer;
@@ -144,14 +189,17 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
       return;
     }
 
-    if (noZones) {
-      setSubmitError('Create at least one zone before adding checkpoints.');
+    if (missingZoneContext) {
+      setSubmitError('Zone context is missing. Open create or edit from a zone details page.');
       return;
     }
 
     try {
       setLoading(true);
-      const payload = buildCheckpointPayload(formData);
+      const payload = buildCheckpointPayload({
+        ...formData,
+        zone_id: activeZoneId
+      });
 
       if (isEdit) {
         await repository.updateCheckpoint(checkpointId, payload);
@@ -176,7 +224,7 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
   };
 
   const handleCancel = () => {
-    navigate('/admin/management-checkpoint');
+    navigateToZoneDetails(activeZoneId);
   };
 
   const handleModalClose = () => {
@@ -185,7 +233,7 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
       navigate(`/admin/management-checkpoint/${savedCheckpointId}`);
       return;
     }
-    navigate('/admin/management-checkpoint');
+    navigateToZoneDetails(activeZoneId);
   };
 
   const mapLatitude =
@@ -203,9 +251,9 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
     loading,
     initialLoading,
     submitError,
-    zones,
-    zonesLoading,
-    noZones,
+    zoneName,
+    zoneLoading,
+    missingZoneContext,
     isEdit,
     showSuccessModal,
     mapLatitude,

@@ -1,4 +1,4 @@
-import { LOCATION_TYPES, RADIUS_MAX, RADIUS_MIN } from './checkpointConstants';
+import { LOCATION_TYPES, RADIUS_MAX, RADIUS_MIN, normalizeLocationType } from './checkpointConstants';
 
 export function validateCheckpointForm(formData, { isEdit = false } = {}) {
   const errors = {};
@@ -11,7 +11,7 @@ export function validateCheckpointForm(formData, { isEdit = false } = {}) {
   }
 
   if (!formData.zone_id) {
-    errors.zone_id = 'Zone is required';
+    errors.zone_id = 'Zone context is required (open this form from a zone details page)';
   }
 
   const lat = formData.latitude === '' || formData.latitude == null ? NaN : Number(formData.latitude);
@@ -35,9 +35,9 @@ export function validateCheckpointForm(formData, { isEdit = false } = {}) {
     errors.radius = `Radius must be between ${RADIUS_MIN} and ${RADIUS_MAX} metres`;
   }
 
-  const locationType = formData.location_type;
-  if (!locationType || !LOCATION_TYPES.includes(locationType)) {
-    errors.location_type = 'Location type is required';
+  const rawLocationType = String(formData.location_type ?? '').trim().toLowerCase();
+  if (!rawLocationType || !LOCATION_TYPES.includes(rawLocationType)) {
+    errors.location_type = 'Location type must be Indoor or Outdoor';
   }
 
   if (formData.is_active !== true && formData.is_active !== false) {
@@ -54,7 +54,7 @@ export function buildCheckpointPayload(formData) {
     latitude: Number(formData.latitude),
     longitude: Number(formData.longitude),
     radius: Number(formData.radius),
-    location_type: formData.location_type,
+    location_type: normalizeLocationType(formData.location_type),
     is_active: Boolean(formData.is_active)
   };
 }

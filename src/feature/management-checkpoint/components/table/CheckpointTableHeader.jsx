@@ -1,11 +1,13 @@
 import { TableCell, TableHead, TableRow } from '@mui/material';
 
-export function CheckpointTableHeader() {
+export function CheckpointTableHeader({ hideZoneColumn = false }) {
   return (
     <TableHead sx={{ backgroundColor: 'secondary.light' }}>
       <TableRow>
         <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }}>Name</TableCell>
-        <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }}>Zone</TableCell>
+        {!hideZoneColumn ? (
+          <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }}>Zone</TableCell>
+        ) : null}
         <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }} align="center">
           Type
         </TableCell>

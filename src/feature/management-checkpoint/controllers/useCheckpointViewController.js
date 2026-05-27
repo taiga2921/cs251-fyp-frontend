@@ -31,6 +31,11 @@ export const useCheckpointViewController = (repository, checkpointId) => {
   };
 
   const handleBack = () => {
+    const zoneId = checkpoint?.zone_id ?? checkpoint?.zone?.id;
+    if (zoneId) {
+      navigate(`/admin/management-zone/view/${zoneId}`);
+      return;
+    }
     navigate('/admin/management-checkpoint');
   };
 

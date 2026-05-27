@@ -3,9 +3,9 @@ export class ZoneRepository {
     this.dataSource = dataSource;
   }
 
-  async getAllZones() {
+  async getAllZones(params) {
     try {
-      return await this.dataSource.getAllZones();
+      return await this.dataSource.getAllZones(params);
     } catch (error) {
       console.error('Error fetching zones:', error);
       throw error;
@@ -23,9 +23,6 @@ export class ZoneRepository {
 
   async createZone(zoneData) {
     try {
-      if (!zoneData.name || !zoneData.description) {
-        throw new Error('Zone name is required');
-      }
       return await this.dataSource.createZone(zoneData);
     } catch (error) {
       console.error('Error creating zone:', error);
@@ -35,9 +32,6 @@ export class ZoneRepository {
 
   async updateZone(zoneId, zoneData) {
     try {
-      if (!zoneData.name || !zoneData.description) {
-        throw new Error('Zone name is required');
-      }
       return await this.dataSource.updateZone(zoneId, zoneData);
     } catch (error) {
       console.error('Error updating zone:', error);
@@ -54,22 +48,28 @@ export class ZoneRepository {
     }
   }
 
-  filterZones(zones, searchText) {
-    if (!searchText) return zones;
-
-    const lowerSearch = searchText.toLowerCase();
-    return zones.filter((zone) => {
-      const name = zone.name || '';
-      // const checkpoints_count = zone.checkpoints_count || '';
-
-      // return zone.name.toLowerCase().includes(lowerSearch) || zone.checkpoints_count.toString().toLowerCase().includes(lowerSearch);
-      return name.toLowerCase().includes(lowerSearch);
-    });
+  /** @returns {{ items: object[], total: number, page: number, perPage: number, lastPage: number }} */
+  normalizeZoneListResponse(payload) {
+    const paginated = payload?.data ?? payload;
+    const items = Array.isArray(paginated?.data) ? paginated.data : Array.isArray(paginated) ? paginated : [];
+    const meta = paginated?.meta ?? {};
+    return {
+      items,
+      total: meta.total ?? items.length,
+      page: meta.current_page ?? 1,
+      perPage: meta.per_page ?? (items.length || 15),
+      lastPage: meta.last_page ?? 1
+    };
   }
 
-  paginateZones(zones, page, rowsPerPage) {
-    const start = page * rowsPerPage;
-    const end = start + rowsPerPage;
-    return zones.slice(start, end);
+  normalizeZone(payload) {
+    return payload?.data ?? payload;
+  }
+
+  normalizeZonesList(payload) {
+    const paginated = payload?.data ?? payload;
+    if (Array.isArray(paginated?.data)) return paginated.data;
+    if (Array.isArray(paginated)) return paginated;
+    return [];
   }
 }

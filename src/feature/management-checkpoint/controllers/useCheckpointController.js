@@ -6,7 +6,7 @@ export const useCheckpointController = (repository, { zoneId: scopedZoneId = nul
   const [checkpoints, setCheckpoints] = useState([]);
   const [zone, setZone] = useState(null);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
   const [totalCount, setTotalCount] = useState(0);
   const [filterText, setFilterText] = useState('');
   const [zoneFilter, setZoneFilter] = useState(scopedZoneId ?? '');
@@ -77,8 +77,9 @@ export const useCheckpointController = (repository, { zoneId: scopedZoneId = nul
   }, [repository, scopedZoneId]);
 
   useEffect(() => {
+    if (scopedZoneId) return;
     loadZones();
-  }, [loadZones]);
+  }, [loadZones, scopedZoneId]);
 
   useEffect(() => {
     loadCheckpoints();

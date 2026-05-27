@@ -62,7 +62,7 @@ export default function CheckpointList() {
         activeFilter={controller.activeFilter}
         locationTypeFilter={controller.locationTypeFilter}
         zones={controller.zones}
-        zoneFilterDisabled={Boolean(scopedZoneId)}
+        hideZoneFilter={Boolean(scopedZoneId)}
         onFilterChange={controller.handleFilterChange}
         onZoneFilterChange={controller.handleZoneFilterChange}
         onActiveFilterChange={controller.handleActiveFilterChange}
@@ -72,6 +72,7 @@ export default function CheckpointList() {
 
       <CheckpointTable
         checkpoints={controller.checkpoints}
+        hideZoneColumn={Boolean(scopedZoneId)}
         onView={controller.handleViewCheckpoint}
         onEdit={controller.handleEditCheckpoint}
         onDelete={controller.handleDeleteCheckpoint}

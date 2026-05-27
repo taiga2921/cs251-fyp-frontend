@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { Alert, Box, Button, CircularProgress, Stack, useMediaQuery, useTheme } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, useMediaQuery, useTheme } from '@mui/material';
 import { IconMapPin as PinIcon, IconPencil as EditIcon } from '@tabler/icons-react';
 
 import DetailCard from 'ui-component/cards/DetailCard';
@@ -20,6 +20,12 @@ export default function CheckpointView() {
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  const editButton = (
+    <Button variant="contained" color="primary" size="small" startIcon={<EditIcon size={18} />} onClick={controller.handleEdit}>
+      Edit checkpoint
+    </Button>
+  );
 
   if (controller.loading) {
     return (
@@ -42,12 +48,12 @@ export default function CheckpointView() {
   }
 
   return (
-    <DetailCard title="Checkpoint details" avatar={<PinIcon size={24} />} onBack={controller.handleBack}>
-      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 2 }}>
-        <Button variant="contained" color="secondary" size="small" startIcon={<EditIcon size={18} />} onClick={controller.handleEdit}>
-          Edit checkpoint
-        </Button>
-      </Stack>
+    <DetailCard
+      title="Checkpoint details"
+      avatar={<PinIcon size={24} />}
+      onBack={controller.handleBack}
+      headerActions={editButton}
+    >
       <CheckpointProfileData checkpoint={controller.checkpoint} isMobile={isMobile} />
       <br />
       <SectionHeader title="Map" />

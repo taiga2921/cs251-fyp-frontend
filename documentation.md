@@ -53,8 +53,8 @@ The frontend currently provides:
 | User Management — list     | Implemented                          | `feature/management-user/views/UserList.jsx`.                                                                                                                                                                                                                                                                                                                                                                                      |
 | User Management — view     | Implemented                          | `feature/management-user/views/UserView.jsx`.                                                                                                                                                                                                                                                                                                                                                                                      |
 | User Management — add/edit | **Code present but routes disabled** | Components import non-existent files (`ui-component/FieldContainer`, `SuccessDialog`, etc.) and routes are commented out in `MainRoutes.jsx`.                                                                                                                                                                                                                                                                                      |
-| Zone management            | **Implemented**                      | `feature/management-zone` — CRUD at `/admin/management-zone`; zone detail embeds checkpoint list for that zone.                                                                                                                                                                                                                                                                                                                    |
-| Checkpoint management      | **Implemented**                      | `feature/management-checkpoint` — full admin CRUD at `/admin/management-checkpoint` with map picker, filters, server pagination. **Admin only** (menu + routes).                                                                                                                                                                                                                                                                   |
+| Zone management            | **Implemented**                      | `feature/management-zone` — CRUD at `/admin/management-zone`; zone detail at `/admin/management-zone/view/:zoneId` embeds scoped checkpoint list (no zone filter/column) + `ZoneProfileData` (no **Created by** in UI). Default list page size **5**.                                                                                                                                                                                                                                                                                                                    |
+| Checkpoint management      | **Implemented**                      | `feature/management-checkpoint` — full admin CRUD; checkpoint detail **Back** returns to parent zone (`/admin/management-zone/view/:zoneId`); detail header has **Edit** (primary) beside **Back**. Default list page size **5**. **Admin only**.                                                                                                                                                                                                                                                                   |
 | Camera management          | **Partially implemented**            | Menu item exists; dedicated UI not complete.                                                                                                                                                                                                                                                                                                                                                                                       |
 | Patrol Home (`/patrol`)    | **Implemented (functional)**         | `feature/patrol` — **all roles** (Admin, Security Operator, Guard); Laravel **`patrol_sessions.id`** is end-to-end **`patrolId`** (Dexie **`location_logs.patrolId`** and **`POST /pwa/sync`** payload **`patrolId`** match); checkpoints via **`checkpoint-events`**; route crumbs via **`POST /patrol-routes`**; GPS via **`usePatrolController`** + **`services/geolocationService`**; **`PatrolPwaStatusPanel`**. See [Section 15](#15-progressive-web-app-pwa). |
 | Patrol Monitoring          | **Implemented**                      | `feature/patrol-monitoring` — **Admin + Security Operator only**; dashboard + session detail at **`/admin/patrol-monitoring`**; sidebar item under **Operator** group with **`IconMapPin2`**; lists patrol sessions, summaries, checkpoint events, **route map** (Leaflet CDN) with **suspicious segment overlays** (Milestone 10) and **patrol replay** (Milestone 11); **live updates** via Laravel Reverb + Echo (30s polling fallback); **Re-run Validation** calls backend **`POST …/validate`**. |
@@ -716,7 +716,7 @@ It also normalizes errors via `buildServiceError()`:
 
 | Method                     | HTTP call                            | Notes                                                           |
 | -------------------------- | ------------------------------------ | --------------------------------------------------------------- |
-| `getAllZones()`            | `api.get('/zones')`                  | Returns parsed backend payload from Laravel zone list endpoint. |
+| `getAllZones(params)`      | `api.get('/zones')`                  | Query: `page`, `per_page`, `search`, `sort`. Returns parsed backend payload. |
 | `getZoneById(id)`          | `api.get('/zones/{id}')`             |                                                                 |
 | `createZone(zoneData)`     | `api.post('/zones', zoneData)`       | Admin-only route on backend.                                    |
 | `updateZone(id, zoneData)` | `api.patch('/zones/{id}', zoneData)` | Uses PATCH to match Laravel `PUT/PATCH` update route.           |
@@ -1861,6 +1861,59 @@ Each overlay has a Leaflet popup: type, severity, message, time range, distance/
 | `services/realtime/broadcastService.js`                                                                                                                | `disconnect()` on logout (Echo teardown)                                                                                                                                                 |
 | `feature/management-checkpoint/`                                                                                                                       | Admin checkpoint CRUD — see below                                                                                                                                                        |
 
+### Zone management
+
+**Access:** **Admin** only (`RoleProtectedRoute` + `menu-items/admin.js` → Management → **Zone**).
+
+**Architecture:** `views` → `useZoneController` / `useZoneFormController` → `ZoneRepository` → `zoneService` → `api.js`.
+
+**Database fields used:** `id`, `name`, `description`, `created_by` (optional on create/update; not exposed in admin forms), `checkpoints_count` (read-only from API), `created_at`, `updated_at`, nested `creator` (`id`, `name`) on detail.
+
+**API methods (`zoneService.js`):**
+
+| Method                | HTTP                       | Notes                                                                 |
+| --------------------- | -------------------------- | --------------------------------------------------------------------- |
+| `getAllZones(params)` | `GET /zones`               | Query: `page`, `per_page`, `search`, `sort` (`latest` default)      |
+| `getZoneById(id)`     | `GET /zones/{id}`          | Returns `{ success, message, data }`                                  |
+| `createZone(data)`    | `POST /zones`              | Admin-only; body: `name`, `description` (nullable)                    |
+| `updateZone(id,data)` | `PATCH /zones/{id}`        | Admin-only                                                            |
+| `deleteZone(id)`      | `DELETE /zones/{id}`       | Backend returns **204**                                               |
+
+**Create / update payload (frontend → Laravel):**
+
+```json
+{
+  "name": "Main Entrance",
+  "description": "Primary public access point."
+}
+```
+
+Empty description is sent as `null`. Only `name` is required client-side.
+
+**List response mapping:** `useZoneController` calls `repository.normalizeZoneListResponse(payload)` → `items` from `data.data`, `total` from `meta.total`.
+
+**Form fields:** `name` (required, max 255), `description` (optional, max 1000). Legacy fields removed (`code`, `zone_type`, `priority_level`, `center_latitude`, `center_longitude`).
+
+**List UI:** Server-side search (`search` query), pagination (`page`, `per_page`; default **`rowsPerPage` = 5**), columns: row number, `name`, `checkpoints_count`, `updated_at` (Malaysia time), actions (view / edit / delete). Empty state: “No zones found.” Errors shown via `Alert` + delete feedback via `Snackbar`.
+
+**Zone detail (`/admin/management-zone/view/:zoneId`):** Renders `CheckpointList` scoped to the zone. `ZoneProfileData` shows name, checkpoints count, description, created at, last modified (**Created by** / `creator` is omitted from UI only; still returned by API). Embedded checkpoint table hides the **Zone** filter and **Zone** column. Default page size **5**.
+
+**Frontend files:**
+
+| Path | Role |
+| ---- | ---- |
+| `feature/management-zone/views/ZoneList.jsx` | List + toolbar + pagination |
+| `feature/management-zone/views/ZoneAdd.jsx` | Create form |
+| `feature/management-zone/views/ZoneEdit.jsx` | Edit form |
+| `feature/management-zone/controllers/useZoneController.js` | List logic |
+| `feature/management-zone/controllers/useZoneFormController.js` | Create/edit logic |
+| `feature/management-zone/repositories/zoneRepository.js` | Response normalization |
+| `feature/management-zone/datasources/zoneService.js` | HTTP client |
+| `feature/management-zone/utils/zoneValidation.js` | Client + API error mapping |
+| `feature/management-checkpoint/components/view/ZoneProfileData.jsx` | Zone detail header on view route |
+
+**Known limitations:** `created_by` is not set automatically from the logged-in admin in the UI (optional API field). Zone delete does not warn about dependent patrol sessions (`patrol_sessions.zone_id` is `restrict` on delete at DB level — delete may fail if sessions exist).
+
 ### Checkpoint management (Milestone 8)
 
 **Access:** **Admin** only (`RoleProtectedRoute` + `menu-items/admin.js` → Management → **Checkpoint**). Security Operator and Guard do not see this menu item.
@@ -1877,11 +1930,19 @@ Each overlay has a Leaflet popup: type, severity, message, time range, distance/
 | `updateCheckpoint(id, data)` | `PATCH /checkpoints/{id}`  |                                                                              |
 | `deleteCheckpoint(id)`       | `DELETE /checkpoints/{id}` | Backend returns **204**                                                      |
 
-**Form fields:** `name`, `zone_id`, `latitude`, `longitude`, `radius` (5–100 m per backend validation), `location_type` (`outdoor` \| `indoor`), `is_active`. Defaults on create: `location_type=outdoor`, `radius=20`, `is_active=true`; switching type on create sets recommended radius (outdoor **20**, indoor **40**). On edit, changing type does **not** auto-change radius — use **Use recommended radius** button.
+**Form fields:** `name`, `zone_id` (fixed from zone context — **not** shown as a dropdown), `latitude`, `longitude`, `radius` (5–100 m per backend validation), `location_type`, `is_active`.
 
-**Map picker (`CheckpointMapPicker.jsx`):** Leaflet via global `window.L` (CDN in `index.html`). Draggable marker; map click updates lat/lng; radius circle syncs with form. Default center **Kuala Lumpur** (3.139, 101.6869) when coordinates empty. View page uses read-only `LeafletMap.jsx` with marker + circle.
+**`location_type` (create/edit):** `SelectFieldContainer` dropdown (`LOCATION_TYPE_OPTIONS` in `checkpointConstants.js`). UI labels **Outdoor** / **Indoor**; submitted values **`outdoor`** / **`indoor`** (matches DB enum). Default on create: `outdoor`. On edit, the current checkpoint value is preselected via `normalizeLocationType()`. Client validation rejects any value outside `outdoor` \| `indoor`.
 
-**List UI:** Search by name, filter by zone / active / location type, server-side pagination, view / edit / delete actions. Delete uses `window.confirm` (technical debt — prefer MUI dialog later). Snackbar feedback on delete.
+Create receives `zoneId` via React Router `location.state` from `/admin/management-zone/view/:zoneId` → **Create checkpoint**. Edit resolves `zone_id` from the loaded checkpoint (or route state). Switching type on create sets recommended radius (outdoor **20**, indoor **40**). On edit, changing type does **not** auto-change radius — use **Use recommended radius** button.
+
+**Create / edit navigation:** **Back** on `CheckpointCreate` and `CheckpointEdit` returns to `/admin/management-zone/view/{zoneId}` when zone context exists; otherwise falls back to the checkpoint list. Success modal still redirects to checkpoint detail after save.
+
+**Map picker (`CheckpointMapPicker.jsx`):** Leaflet via global `window.L` (CDN in `index.html`). Default cursor **pointer**; **grabbing** while panning the map; marker remains draggable for coordinates. Map click updates lat/lng; radius circle syncs with form. Default center **Kuala Lumpur** (3.139, 101.6869) when coordinates empty. View page uses read-only `LeafletMap.jsx` with marker + circle.
+
+**List UI:** Search by name, filter by zone / active / location type (zone filter hidden on zone detail page), server-side pagination (default **`rowsPerPage` = 5**), view / edit / delete actions. Delete uses `window.confirm` (technical debt — prefer MUI dialog later). Snackbar feedback on delete.
+
+**Detail UI (`CheckpointView`):** `DetailCard` header shows **Edit checkpoint** (`color="primary"`, contained) beside **Back**. **Back** navigates to `/admin/management-zone/view/{zoneId}` using `checkpoint.zone_id` or `checkpoint.zone.id` (falls back to checkpoint list if zone is missing). Profile layout: column 1 — **Name** + **Location type** + **Zone**; column 2 — radius / coordinates; column 3 — **Created** + **Status** + **Last updated**.
 
 **Delete:** Does not touch PWA IndexedDB or patrol runtime data — only removes the checkpoint record on the server.
 

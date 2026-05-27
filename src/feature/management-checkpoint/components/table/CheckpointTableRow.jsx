@@ -5,13 +5,13 @@ import { MalaysiaTime } from 'ui-component/MalaysiaTime';
 import CheckpointLocationTypeChip from '../CheckpointLocationTypeChip';
 import CheckpointStatusChip from '../CheckpointStatusChip';
 
-export function CheckpointTableRow({ checkpoint, onView, onEdit, onDelete }) {
+export function CheckpointTableRow({ checkpoint, hideZoneColumn = false, onView, onEdit, onDelete }) {
   const zoneName = checkpoint.zone?.name ?? checkpoint.zone_name ?? '—';
 
   return (
     <TableRow hover>
       <TableCell>{checkpoint.name}</TableCell>
-      <TableCell>{zoneName}</TableCell>
+      {!hideZoneColumn ? <TableCell>{zoneName}</TableCell> : null}
       <TableCell align="center">
         <CheckpointLocationTypeChip locationType={checkpoint.location_type} />
       </TableCell>

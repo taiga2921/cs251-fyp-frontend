@@ -1,9 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+import {
+  buildZonePayload,
+  extractBackendErrorMessage,
+  extractBackendValidationErrors,
+  normalizeValidationErrorsForForm,
+  validateZoneForm
+} from '../utils/zoneValidation';
 
 export const useZoneFormController = (repository, zoneId = null) => {
   const navigate = useNavigate();
-  const fileInputRef = useRef(null);
+  const isEdit = Boolean(zoneId);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -11,17 +19,40 @@ export const useZoneFormController = (repository, zoneId = null) => {
   });
 
   const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(!!zoneId);
+  const [initialLoading, setInitialLoading] = useState(isEdit);
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  const loadZone = useCallback(async () => {
+    if (!zoneId) return;
+
+    try {
+      setInitialLoading(true);
+      setSubmitError('');
+      const response = await repository.getZoneById(zoneId);
+      const zone = repository.normalizeZone(response);
+
+      if (zone) {
+        setFormData({
+          name: zone.name ?? '',
+          description: zone.description ?? ''
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load zone:', err);
+      setSubmitError(err?.message || 'Failed to load zone data.');
+    } finally {
+      setInitialLoading(false);
+    }
+  }, [repository, zoneId]);
+
   useEffect(() => {
-    if (zoneId) {
+    if (isEdit) {
       loadZone();
     }
-  }, [zoneId]);
+  }, [isEdit, loadZone]);
 
-  // Auto-redirect effect
   useEffect(() => {
     let timer;
     if (showSuccessModal) {
@@ -34,71 +65,46 @@ export const useZoneFormController = (repository, zoneId = null) => {
     };
   }, [showSuccessModal]);
 
-  const loadZone = async () => {
-    try {
-      setInitialLoading(true);
-      const zone = await repository.getZoneById(zoneId);
-      if (zone) {
-        setFormData({
-          name: zone.data.name,
-          description: zone.data.description
-        });
-      }
-    } catch (error) {
-      console.error('Failed to load zone:', error);
-      alert('Failed to load zone data');
-    } finally {
-      setInitialLoading(false);
-    }
-  };
-
   const handleChange = (field) => (event) => {
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [field]: event.target.value
-    });
+    }));
+
     if (errors[field]) {
-      setErrors({
-        ...errors,
-        [field]: ''
-      });
+      setErrors((prev) => ({ ...prev, [field]: '' }));
     }
-  };
-
-  const validate = () => {
-    const newErrors = {};
-
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
-    }
-
-    if (!formData.description.trim()) {
-      newErrors.description = 'Description is required';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setSubmitError('');
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!validate()) {
+    const { errors: validationErrors, isValid } = validateZoneForm(formData);
+    if (!isValid) {
+      setErrors(validationErrors);
       return;
     }
 
     try {
       setLoading(true);
-      if (zoneId) {
-        await repository.updateZone(zoneId, formData);
-        setShowSuccessModal(true);
+      setSubmitError('');
+      const payload = buildZonePayload(formData);
+
+      if (isEdit) {
+        await repository.updateZone(zoneId, payload);
       } else {
-        await repository.createZone(formData);
-        setShowSuccessModal(true);
+        await repository.createZone(payload);
       }
-    } catch (error) {
-      console.error('Failed to save zone:', error);
-      alert('Failed to save zone: ' + error.message);
+
+      setShowSuccessModal(true);
+    } catch (err) {
+      console.error('Failed to save zone:', err);
+      const backendErrors = extractBackendValidationErrors(err);
+      if (backendErrors) {
+        setErrors(normalizeValidationErrorsForForm(backendErrors));
+      }
+      setSubmitError(extractBackendErrorMessage(err, 'Failed to save zone.'));
     } finally {
       setLoading(false);
     }
@@ -110,7 +116,7 @@ export const useZoneFormController = (repository, zoneId = null) => {
 
   const handleModalClose = () => {
     setShowSuccessModal(false);
-    if (zoneId) {
+    if (isEdit) {
       navigate(`/admin/management-zone/view/${zoneId}`);
     } else {
       navigate('/admin/management-zone');
@@ -122,8 +128,8 @@ export const useZoneFormController = (repository, zoneId = null) => {
     errors,
     loading,
     initialLoading,
+    submitError,
     showSuccessModal,
-    fileInputRef,
     handleChange,
     handleSubmit,
     handleCancel,
