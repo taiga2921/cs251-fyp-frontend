@@ -19,6 +19,26 @@ const REACT_DOM_PKG = path.resolve(__dirname, 'node_modules/react-dom');
 const CONFIG_CONTEXT_FILE = path.resolve(__dirname, 'src/contexts/ConfigContext.jsx');
 const APP_CONFIG_FILE = path.resolve(__dirname, 'src/config.js');
 
+function normalizeAppBaseName(rawBaseName) {
+  const trimmed = (rawBaseName || '/').trim();
+  if (!trimmed || trimmed === '/') {
+    return '/';
+  }
+
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
+  const withLeadingSlash = withoutTrailingSlash.startsWith('/') ? withoutTrailingSlash : `/${withoutTrailingSlash}`;
+  return withLeadingSlash || '/';
+}
+
+function toViteBasePath(appBaseName) {
+  return appBaseName === '/' ? '/' : `${appBaseName}/`;
+}
+
+function withAppBasePath(viteBasePath, resourcePath) {
+  const normalizedResource = resourcePath.startsWith('/') ? resourcePath.slice(1) : resourcePath;
+  return viteBasePath === '/' ? `/${normalizedResource}` : `${viteBasePath}${normalizedResource}`;
+}
+
 /** Mirrors jsconfig `"baseUrl": "src"` when vite-jsconfig-paths skips ids with no importer (Vite 7 prod graph). */
 function jsconfigSrcBaseUrlFallback() {
   const tryExtensions = ['', '.jsx', '.js', '.tsx', '.ts', '.mjs', '.scss', '.sass', '.css'];
@@ -73,7 +93,8 @@ function jsconfigSrcBaseUrlFallback() {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const API_URL = `${env.VITE_APP_BASE_NAME}`;
+  const appBaseName = normalizeAppBaseName(env.VITE_APP_BASE_NAME);
+  const viteBasePath = toViteBasePath(appBaseName);
   const API_BASE_URL = env.VITE_API_BASE_URL || 'http://localhost:8000/api';
   const PORT = 3000;
 
@@ -109,7 +130,7 @@ export default defineConfig(({ mode }) => {
         '@tabler/icons-react': '@tabler/icons-react/dist/esm/icons/index.mjs'
       }
     },
-    base: API_URL,
+    base: viteBasePath,
     plugins: [
       jsconfigSrcBaseUrlFallback(),
       react(),
@@ -123,23 +144,23 @@ export default defineConfig(({ mode }) => {
           short_name: 'Surveillance',
           description: 'AI Surveillance Patrol System',
           display: 'standalone',
-          start_url: '/',
-          scope: '/',
+          start_url: viteBasePath,
+          scope: viteBasePath,
           theme_color: '#111827',
           background_color: '#ffffff',
           icons: [
             {
-              src: '/icons/icon-192.png',
+              src: withAppBasePath(viteBasePath, '/icons/icon-192.png'),
               sizes: '192x192',
               type: 'image/png'
             },
             {
-              src: '/icons/icon-512.png',
+              src: withAppBasePath(viteBasePath, '/icons/icon-512.png'),
               sizes: '512x512',
               type: 'image/png'
             },
             {
-              src: '/icons/icon-512-maskable.png',
+              src: withAppBasePath(viteBasePath, '/icons/icon-512-maskable.png'),
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable'
@@ -151,7 +172,7 @@ export default defineConfig(({ mode }) => {
           // App shell offline fallback for SPA navigations (React Router basename = Vite `base`).
           navigateFallback: 'index.html',
           navigateFallbackDenylist: buildNavigateFallbackDenylist(API_BASE_URL),
-          navigateFallbackAllowlist: buildNavigateFallbackAllowlist(API_URL),
+          navigateFallbackAllowlist: buildNavigateFallbackAllowlist(appBaseName),
           // POST/PUT/PATCH/DELETE are intentionally omitted — see pwa/workbox-runtime-caching.mjs.
           runtimeCaching: buildRuntimeCaching(API_BASE_URL),
           importScripts: ['push-handlers.js']

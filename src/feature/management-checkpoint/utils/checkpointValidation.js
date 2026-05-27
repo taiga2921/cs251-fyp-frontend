@@ -1,4 +1,5 @@
 import { LOCATION_TYPES, RADIUS_MAX, RADIUS_MIN, normalizeLocationType } from './checkpointConstants';
+import { normalizeCoordinate } from './coordinateUtils';
 
 export function validateCheckpointForm(formData, { isEdit = false } = {}) {
   const errors = {};
@@ -14,15 +15,15 @@ export function validateCheckpointForm(formData, { isEdit = false } = {}) {
     errors.zone_id = 'Zone context is required (open this form from a zone details page)';
   }
 
-  const lat = formData.latitude === '' || formData.latitude == null ? NaN : Number(formData.latitude);
-  if (Number.isNaN(lat)) {
+  const lat = normalizeCoordinate(formData.latitude, 'latitude', { asNumber: true });
+  if (lat == null) {
     errors.latitude = 'Latitude is required';
   } else if (lat < -90 || lat > 90) {
     errors.latitude = 'Latitude must be between -90 and 90';
   }
 
-  const lng = formData.longitude === '' || formData.longitude == null ? NaN : Number(formData.longitude);
-  if (Number.isNaN(lng)) {
+  const lng = normalizeCoordinate(formData.longitude, 'longitude', { asNumber: true });
+  if (lng == null) {
     errors.longitude = 'Longitude is required';
   } else if (lng < -180 || lng > 180) {
     errors.longitude = 'Longitude must be between -180 and 180';
@@ -51,8 +52,8 @@ export function buildCheckpointPayload(formData) {
   return {
     zone_id: formData.zone_id,
     name: String(formData.name).trim(),
-    latitude: Number(formData.latitude),
-    longitude: Number(formData.longitude),
+    latitude: normalizeCoordinate(formData.latitude, 'latitude', { asNumber: true }),
+    longitude: normalizeCoordinate(formData.longitude, 'longitude', { asNumber: true }),
     radius: Number(formData.radius),
     location_type: normalizeLocationType(formData.location_type),
     is_active: Boolean(formData.is_active)

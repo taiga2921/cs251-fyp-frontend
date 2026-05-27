@@ -6,8 +6,18 @@ import MainRoutes from './MainRoutes';
 
 // ==============================|| ROUTING RENDER ||============================== //
 
+function normalizeRouterBaseName(rawBaseName) {
+  const trimmed = (rawBaseName || '/').trim();
+  if (!trimmed || trimmed === '/') {
+    return '/';
+  }
+
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
+  return withoutTrailingSlash.startsWith('/') ? withoutTrailingSlash : `/${withoutTrailingSlash}`;
+}
+
 const router = createBrowserRouter([MainRoutes, AuthenticationRoutes], {
-  basename: import.meta.env.VITE_APP_BASE_NAME
+  basename: normalizeRouterBaseName(import.meta.env.VITE_APP_BASE_NAME)
 });
 
 export default router;

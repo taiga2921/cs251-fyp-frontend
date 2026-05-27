@@ -70,6 +70,21 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/a
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
 
+## Netlify SPA Routing (Vite)
+
+This project uses React Router + Vite, so Netlify must rewrite unknown routes to `index.html`.
+
+- Root deployment (`VITE_APP_BASE_NAME=/`): use `public/_redirects` with:
+  - `/*    /index.html   200`
+- Subpath deployment (`VITE_APP_BASE_NAME=/fyp`): use:
+  - `/fyp/*    /fyp/index.html   200`
+
+Keep `VITE_APP_BASE_NAME` and routing rewrite rules aligned:
+
+- `vite.config.mjs` uses `VITE_APP_BASE_NAME` for Vite `base` (asset URLs).
+- `src/routes/index.jsx` uses the same value for React Router `basename`.
+- If you deploy under `/fyp`, set `VITE_APP_BASE_NAME=/fyp` at build time and update `public/_redirects` accordingly.
+
 ### `yarn build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)

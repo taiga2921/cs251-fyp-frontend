@@ -234,7 +234,7 @@ View
 
 ```
 createBrowserRouter([MainRoutes, AuthenticationRoutes], {
-  basename: import.meta.env.VITE_APP_BASE_NAME // "/fyp" by default
+  basename: import.meta.env.VITE_APP_BASE_NAME // "/" by default in current .env
 })
 ```
 
@@ -524,7 +524,7 @@ MUI theme definition.
 
 ## 4. Routing Documentation
 
-Routing uses **React Router v7** object routes via `createBrowserRouter`. The `basename` is set to `VITE_APP_BASE_NAME` (default `/fyp`).
+Routing uses **React Router v7** object routes via `createBrowserRouter`. The `basename` is set to `VITE_APP_BASE_NAME` (default `/` in the current `.env`).
 
 ### Top-Level Tree
 
@@ -1205,7 +1205,7 @@ All validation is client-side (regex + truthiness). The backend's validation res
 ```
 VITE_APP_VERSION=v5.1.0
 GENERATE_SOURCEMAP=false
-VITE_APP_BASE_NAME=/fyp
+VITE_APP_BASE_NAME=/
 VITE_API_BASE_URL=http://localhost:8000/api
 ```
 
@@ -1381,9 +1381,9 @@ The dev server is configured by `vite.config.mjs`:
 - Port: `3000`
 - `host: true` (binds on `0.0.0.0`)
 - `open: true` (auto-opens browser)
-- Public path / base: `VITE_APP_BASE_NAME` (default `/fyp`).
+- Public path / base: `VITE_APP_BASE_NAME` (default `/` in the current `.env`).
 
-So with the default `.env`, the app is reachable at `http://localhost:3000/fyp/`.
+So with the default `.env`, the app is reachable at `http://localhost:3000/`.
 
 ### Run Commands
 
@@ -1406,9 +1406,9 @@ yarn preview    # local sanity check of the built bundle
 ### Production Deployment Notes
 
 - Output directory: `dist/` (Vite default).
-- The bundle expects to be served under the path defined by `VITE_APP_BASE_NAME` (default `/fyp`). The hosting server (Nginx, Apache, S3+CloudFront, etc.) must:
+- The bundle expects to be served under the path defined by `VITE_APP_BASE_NAME` (default `/` in the current `.env`). The hosting server (Nginx, Apache, S3+CloudFront, Netlify, etc.) must:
   - Serve `dist/` at that path.
-  - Fallback unknown paths to `index.html` so the SPA router can take over (typical SPA `try_files $uri /fyp/index.html;` rule).
+  - Fallback unknown paths to `index.html` so the SPA router can take over (for Netlify, use `_redirects`: `/* /index.html 200` at root, or `/fyp/* /fyp/index.html 200` when hosted under `/fyp`).
 - Backend CORS must allow the frontend origin and the `Authorization` header.
 
 ### Environment Variable Setup
@@ -1938,7 +1938,11 @@ Create receives `zoneId` via React Router `location.state` from `/admin/manageme
 
 **Create / edit navigation:** **Back** on `CheckpointCreate` and `CheckpointEdit` returns to `/admin/management-zone/view/{zoneId}` when zone context exists; otherwise falls back to the checkpoint list. Success modal still redirects to checkpoint detail after save.
 
-**Map picker (`CheckpointMapPicker.jsx`):** Leaflet via global `window.L` (CDN in `index.html`). Default cursor **pointer**; **grabbing** while panning the map; marker remains draggable for coordinates. Map click updates lat/lng; radius circle syncs with form. Default center **Kuala Lumpur** (3.139, 101.6869) when coordinates empty. View page uses read-only `LeafletMap.jsx` with marker + circle.
+**Map picker (`CheckpointMapPicker.jsx`):** Leaflet via global `window.L` (CDN in `index.html`). Instruction text: `Click the map or drag the marker to set coordinates. Drag the map to pan. The circle shows the checkpoint radius.` Map click updates lat/lng; marker drag updates lat/lng; map drag only pans. Cursor uses **grab/grabbing** for pan interactions. Radius circle stays synced with current marker location.
+
+**Read-only detail map (`LeafletMap.jsx`):** Instruction text: `Drag the map to pan. The circle shows the checkpoint radius.` No click-to-set and no marker drag on detail view.
+
+**Coordinate normalization:** `normalizeCoordinate()` (`utils/coordinateUtils.js`) is applied to manual input, map click, marker drag, and loaded checkpoint values. It clamps latitude/longitude ranges, limits precision to **7 decimals**, and limits the final coordinate string to **10 chars** where possible to avoid UI freezes from extremely long inputs.
 
 **List UI:** Search by name, filter by zone / active / location type (zone filter hidden on zone detail page), server-side pagination (default **`rowsPerPage` = 5**), view / edit / delete actions. Delete uses `window.confirm` (technical debt — prefer MUI dialog later). Snackbar feedback on delete.
 

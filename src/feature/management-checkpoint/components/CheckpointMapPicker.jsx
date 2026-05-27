@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Typography } from '@mui/material';
 
 import { DEFAULT_MAP_CENTER } from '../utils/checkpointConstants';
+import { normalizeCoordinate } from '../utils/coordinateUtils';
 
 /**
  * Interactive Leaflet map: click/drag marker, radius circle synced with form.
@@ -18,11 +19,21 @@ export default function CheckpointMapPicker({
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const circleRef = useRef(null);
+  const disabledRef = useRef(disabled);
+  const onCoordinatesChangeRef = useRef(onCoordinatesChange);
   const [isMapDragging, setIsMapDragging] = useState(false);
 
   const lat = Number.isFinite(latitude) ? latitude : DEFAULT_MAP_CENTER.latitude;
   const lng = Number.isFinite(longitude) ? longitude : DEFAULT_MAP_CENTER.longitude;
   const radiusM = Number(radius) > 0 ? Number(radius) : 20;
+
+  useEffect(() => {
+    disabledRef.current = disabled;
+  }, [disabled]);
+
+  useEffect(() => {
+    onCoordinatesChangeRef.current = onCoordinatesChange;
+  }, [onCoordinatesChange]);
 
   useEffect(() => {
     if (!window.L || !mapContainerRef.current) {
@@ -42,10 +53,10 @@ export default function CheckpointMapPicker({
       }).addTo(mapRef.current);
 
       const emitCoords = (nextLat, nextLng) => {
-        if (disabled) return;
-        onCoordinatesChange?.({
-          latitude: Number(nextLat.toFixed(7)),
-          longitude: Number(nextLng.toFixed(7))
+        if (disabledRef.current) return;
+        onCoordinatesChangeRef.current?.({
+          latitude: normalizeCoordinate(nextLat, 'latitude'),
+          longitude: normalizeCoordinate(nextLng, 'longitude')
         });
       };
 
@@ -60,7 +71,7 @@ export default function CheckpointMapPicker({
       });
 
       mapRef.current.on('click', (event) => {
-        if (disabled) return;
+        if (disabledRef.current) return;
         const { lat: clickLat, lng: clickLng } = event.latlng;
         markerRef.current.setLatLng([clickLat, clickLng]);
         emitCoords(clickLat, clickLng);
@@ -105,10 +116,8 @@ export default function CheckpointMapPicker({
       }).addTo(mapRef.current);
     }
 
-    mapRef.current.setView([lat, lng], mapRef.current.getZoom());
-
     return undefined;
-  }, [lat, lng, radiusM, onCoordinatesChange, disabled]);
+  }, [lat, lng, radiusM, disabled]);
 
   useEffect(() => {
     return () => {
@@ -148,7 +157,7 @@ export default function CheckpointMapPicker({
           opacity: disabled ? 0.6 : 1,
           pointerEvents: disabled ? 'none' : 'auto',
           '& .leaflet-container': {
-            cursor: 'pointer'
+            cursor: 'grab'
           },
           '&.checkpoint-map-picker--dragging .leaflet-container': {
             cursor: 'grabbing'

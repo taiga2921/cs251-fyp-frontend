@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { DEFAULT_MAP_CENTER, RECOMMENDED_RADIUS, normalizeLocationType } from '../utils/checkpointConstants';
+import { normalizeCoordinate } from '../utils/coordinateUtils';
 import {
   buildCheckpointPayload,
   extractBackendErrorMessage,
@@ -96,8 +97,8 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
       setFormData({
         zone_id: zoneId,
         name: cp.name ?? '',
-        latitude: cp.latitude ?? '',
-        longitude: cp.longitude ?? '',
+        latitude: normalizeCoordinate(cp.latitude, 'latitude'),
+        longitude: normalizeCoordinate(cp.longitude, 'longitude'),
         radius: cp.radius ?? RECOMMENDED_RADIUS.outdoor,
         location_type: normalizeLocationType(cp.location_type),
         is_active: cp.is_active !== false
@@ -146,6 +147,14 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
       value = eventOrValue.target.checked;
     }
 
+    if (field === 'latitude') {
+      value = normalizeCoordinate(value, 'latitude');
+    }
+
+    if (field === 'longitude') {
+      value = normalizeCoordinate(value, 'longitude');
+    }
+
     setFormData((prev) => {
       const next = { ...prev, [field]: value };
 
@@ -165,8 +174,8 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
   const handleCoordinatesChange = ({ latitude, longitude }) => {
     setFormData((prev) => ({
       ...prev,
-      latitude: latitude ?? prev.latitude,
-      longitude: longitude ?? prev.longitude
+      latitude: latitude == null ? prev.latitude : normalizeCoordinate(latitude, 'latitude'),
+      longitude: longitude == null ? prev.longitude : normalizeCoordinate(longitude, 'longitude')
     }));
     setErrors((prev) => ({ ...prev, latitude: '', longitude: '' }));
   };
@@ -239,11 +248,11 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
   const mapLatitude =
     formData.latitude === '' || formData.latitude == null
       ? DEFAULT_MAP_CENTER.latitude
-      : Number(formData.latitude);
+      : normalizeCoordinate(formData.latitude, 'latitude', { asNumber: true }) ?? DEFAULT_MAP_CENTER.latitude;
   const mapLongitude =
     formData.longitude === '' || formData.longitude == null
       ? DEFAULT_MAP_CENTER.longitude
-      : Number(formData.longitude);
+      : normalizeCoordinate(formData.longitude, 'longitude', { asNumber: true }) ?? DEFAULT_MAP_CENTER.longitude;
 
   return {
     formData,
