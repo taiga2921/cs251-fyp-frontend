@@ -25,32 +25,32 @@ const operator = {
       url: '/admin/patrol-monitoring',
       icon: icons.IconMapPin2
     },
-    {
-      id: 'operator-patrol',
-      title: 'Patrol',
-      type: 'collapse',
-      icon: icons.IconMapPin2,
-      children: [
-        {
-          id: 'operator-live-tracking',
-          title: 'Live Tracking',
-          type: 'item',
-          url: '/operator/patrol/live-tracking'
-        },
-        {
-          id: 'operator-patrol-history',
-          title: 'History',
-          type: 'item',
-          url: '/operator/patrol/history'
-        }
+    // {
+    //   id: 'operator-patrol',
+    //   title: 'Patrol',
+    //   type: 'collapse',
+    //   icon: icons.IconMapPin2,
+    //   children: [
+    //     {
+    //       id: 'operator-live-tracking',
+    //       title: 'Live Tracking',
+    //       type: 'item',
+    //       url: '/operator/patrol/live-tracking'
+    //     },
+    //     {
+    //       id: 'operator-patrol-history',
+    //       title: 'History',
+    //       type: 'item',
+    //       url: '/operator/patrol/history'
+    //     }
         // {
         //   id: 'operator-patrol-statistics',
         //   title: 'Statistics',
         //   type: 'item',
         //   url: '/operator/patrol/statistics'
         // }
-      ]
-    }
+    //   ]
+    // }
     // {
     //   id: 'operator-report',
     //   title: 'Report',

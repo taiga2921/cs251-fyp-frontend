@@ -234,7 +234,7 @@ View
 
 ```
 createBrowserRouter([MainRoutes, AuthenticationRoutes], {
-  basename: import.meta.env.VITE_APP_BASE_NAME // "/" by default in current .env
+  basename: normalizeRouterBaseName(VITE_APP_BASE_NAME) // "/" by default in current .env
 })
 ```
 
@@ -308,7 +308,7 @@ frontend-react-v1/
 ├── yarn.lock
 ├── README.md                 # Original CRA-style README (legacy)
 ├── documentation.md          # ← this file
-├── public/                   # Static files copied to dist root (favicon, `icons/` for PWA manifest)
+├── public/                   # Static files copied to dist root (`_redirects`, `push-handlers.js`, `icons/` for PWA)
 └── src/
     ├── App.jsx               # ThemeCustomization + NavigationScroll + NetworkSnackbar + RouterProvider
     ├── components/           # Shared components (e.g. NetworkSnackbar for offline/online feedback)
@@ -524,12 +524,14 @@ MUI theme definition.
 
 ## 4. Routing Documentation
 
-Routing uses **React Router v7** object routes via `createBrowserRouter`. The `basename` is set to `VITE_APP_BASE_NAME` (default `/` in the current `.env`).
+Routing uses **React Router v7** object routes via `createBrowserRouter`. The `basename` is normalized from `VITE_APP_BASE_NAME` (default `/` in the current `.env`; trailing slashes are stripped for subpaths such as `/fyp`).
 
 ### Top-Level Tree
 
 ```jsx
-const router = createBrowserRouter([MainRoutes, AuthenticationRoutes], { basename: import.meta.env.VITE_APP_BASE_NAME });
+const router = createBrowserRouter([MainRoutes, AuthenticationRoutes], {
+  basename: normalizeRouterBaseName(import.meta.env.VITE_APP_BASE_NAME)
+});
 ```
 
 | Group                  | Path | Wrapper            | Layout          |
@@ -563,12 +565,14 @@ Defined in `src/routes/MainRoutes.jsx`. Wrapped in `ProtectedRoute` — unauthen
 | `/guard/patrol`                                   | _redirect_                               | `MainLayout` | `<Navigate to="/patrol" replace />` (legacy).                   |
 | `/admin/management-user`                          | `feature/management-user/views/UserList` | `MainLayout` | **Admin only** — user list.                                     |
 | `/admin/management-user/view/:userId`             | `feature/management-user/views/UserView` | `MainLayout` | **Admin only**.                                                 |
-| `/admin/management-zone`                          | `feature/management-zone/views/ZoneList` | `MainLayout` | **Admin only**.                                                 |
-| `/admin/management-checkpoint`                    | `CheckpointList`                         | `MainLayout` | **Admin only** — checkpoint list (search, filters, pagination). |
+| `/admin/management-zone`                          | `feature/management-zone/views/ZoneList` | `MainLayout` | **Admin only** — zone list (search, pagination).                |
+| `/admin/management-zone/add`                      | `feature/management-zone/views/ZoneAdd`  | `MainLayout` | **Admin only** — create zone.                                   |
+| `/admin/management-zone/edit/:zoneId`             | `feature/management-zone/views/ZoneEdit` | `MainLayout` | **Admin only** — edit zone.                                     |
+| `/admin/management-zone/view/:zoneId`             | `CheckpointList` (zone-scoped)           | `MainLayout` | **Admin only** — zone profile + checkpoints in zone.            |
+| `/admin/management-checkpoint`                    | `CheckpointList`                         | `MainLayout` | **Admin only** — global checkpoint list (search, filters).      |
 | `/admin/management-checkpoint/create`             | `CheckpointCreate`                       | `MainLayout` | **Admin only** — create with map picker.                        |
 | `/admin/management-checkpoint/:checkpointId`      | `CheckpointView`                         | `MainLayout` | **Admin only** — detail + read-only map.                        |
-| `/admin/management-checkpoint/:checkpointId/edit` | `CheckpointEdit`                         | `MainLayout` | **Admin only** — edit all fields.                               |
-| `/admin/management-zone/view/:zoneId`             | `CheckpointList` (zone-scoped)           | `MainLayout` | **Admin only** — checkpoints filtered to one zone.              |
+| `/admin/management-checkpoint/:checkpointId/edit` | `CheckpointEdit`                         | `MainLayout` | **Admin only** — edit (zone from checkpoint).                   |
 | `/admin/patrol-monitoring`                        | `PatrolMonitoringDashboard`              | `MainLayout` | **Admin + Security Operator**.                                  |
 | `/admin/patrol-monitoring/:patrolSessionId`       | `PatrolSessionDetail`                    | `MainLayout` | **Admin + Security Operator**.                                  |
 | `/operator/patrol/*`                              | operator patrol views                    | `MainLayout` | **Admin only** (legacy operator module).                        |
@@ -1231,7 +1235,7 @@ The config file is **`vite.config.mjs`** (not `vite.config.js`). Plugins include
 | `resolve.alias`  | `react`, `react-dom`, `react/jsx-runtime`, `react/jsx-dev-runtime` → absolute `node_modules` paths | Pins a single React instance for context/providers.                                                                                                                                                       |
 | `resolve.alias`  | `contexts/ConfigContext`, `config` → absolute paths under `src/`                                   | Ensures one canonical module for context + default config.                                                                                                                                                |
 | `resolve.alias`  | `@tabler/icons-react` → ESM icons bundle                                                           | Smaller icon imports.                                                                                                                                                                                     |
-| `base`           | `${env.VITE_APP_BASE_NAME}`                                                                        | SPA public base path (from `.env`, often `/`).                                                                                                                                                            |
+| `base`           | Normalized from `VITE_APP_BASE_NAME` via `normalizeAppBaseName` / `toViteBasePath` (`/` or `/fyp/`) | SPA public base path for asset URLs (from `.env`, currently `/`). PWA manifest `start_url`, `scope`, and icon paths use the same normalized base. |
 | `plugins`        | `jsconfigSrcBaseUrlFallback`, `react()`, `jsconfigPaths()`, `VitePWA({ … })`                       | PWA: `generateSW`, manifest, Workbox precache + **`runtimeCaching`** from **`pwa/workbox-runtime-caching.mjs`**; `injectRegister: false` because registration uses `virtual:pwa-register` in `index.jsx`. |
 
 The **`jsconfigSrcBaseUrlFallback`** plugin resolves bare imports from `src/` when needed for Vite 7 production builds; it explicitly **skips** `react`, `react-dom`, and `scheduler` so those always resolve via normal node resolution.
@@ -1408,8 +1412,19 @@ yarn preview    # local sanity check of the built bundle
 - Output directory: `dist/` (Vite default).
 - The bundle expects to be served under the path defined by `VITE_APP_BASE_NAME` (default `/` in the current `.env`). The hosting server (Nginx, Apache, S3+CloudFront, Netlify, etc.) must:
   - Serve `dist/` at that path.
-  - Fallback unknown paths to `index.html` so the SPA router can take over (for Netlify, use `_redirects`: `/* /index.html 200` at root, or `/fyp/* /fyp/index.html 200` when hosted under `/fyp`).
+  - Fallback unknown paths to `index.html` so the SPA router can take over.
 - Backend CORS must allow the frontend origin and the `Authorization` header.
+
+#### Netlify SPA routing
+
+`public/_redirects` is copied into `dist/` on build. It tells Netlify to serve `index.html` for client-side routes (fixes refresh and direct URL 404s).
+
+| `VITE_APP_BASE_NAME` | `public/_redirects` rule |
+| -------------------- | ------------------------ |
+| `/` (root)           | `/*    /index.html   200` |
+| `/fyp`               | `/fyp/*    /fyp/index.html   200` |
+
+Keep `VITE_APP_BASE_NAME`, Vite `base`, React Router `basename`, and `_redirects` aligned. Set `VITE_APP_BASE_NAME` at **build time** before `yarn build`.
 
 ### Environment Variable Setup
 
@@ -1429,6 +1444,7 @@ After `yarn build`:
 ```
 dist/
 ├── index.html                  # Entry HTML; `<link rel="manifest">` injected by vite-plugin-pwa
+├── _redirects                  # Netlify SPA fallback (copied from public/_redirects)
 ├── manifest.webmanifest        # Web app manifest (name, icons, theme_color, …)
 ├── sw.js                       # Generated service worker (Workbox)
 ├── workbox-*.js                # Workbox runtime (hash varies by build)
@@ -1501,7 +1517,7 @@ Logout is wired through `useAuthController.handleLogout()` from `ProfileSection`
 
 ### Empty Feature Folders
 
-`feature/authentication` implements logout (login UI remains in `views/pages/auth-forms`); `feature/management-checkpoint` is complete (Milestone 8); `feature/management-camera` remains incomplete. Zone service wiring exists, but route/menu parity for all admin management screens should still be validated end-to-end.
+`feature/authentication` implements logout (login UI remains in `views/pages/auth-forms`); `feature/management-zone` and `feature/management-checkpoint` are aligned with Laravel zone/checkpoint APIs (Milestone 8+); `feature/management-camera` remains incomplete.
 
 ### Patrol GPS singleton (`feature/patrol/services/geolocationService.js`)
 
@@ -1867,7 +1883,7 @@ Each overlay has a Leaflet popup: type, severity, message, time range, distance/
 
 **Architecture:** `views` → `useZoneController` / `useZoneFormController` → `ZoneRepository` → `zoneService` → `api.js`.
 
-**Database fields used:** `id`, `name`, `description`, `created_by` (optional on create/update; not exposed in admin forms), `checkpoints_count` (read-only from API), `created_at`, `updated_at`, nested `creator` (`id`, `name`) on detail.
+**Database fields used:** `id`, `name`, `description`, `created_by` (optional on API; not in admin forms), `checkpoints_count` (read-only), `created_at`, `updated_at`. API may return nested `creator` but admin UI does not display it.
 
 **API methods (`zoneService.js`):**
 
@@ -1896,7 +1912,9 @@ Empty description is sent as `null`. Only `name` is required client-side.
 
 **List UI:** Server-side search (`search` query), pagination (`page`, `per_page`; default **`rowsPerPage` = 5**), columns: row number, `name`, `checkpoints_count`, `updated_at` (Malaysia time), actions (view / edit / delete). Empty state: “No zones found.” Errors shown via `Alert` + delete feedback via `Snackbar`.
 
-**Zone detail (`/admin/management-zone/view/:zoneId`):** Renders `CheckpointList` scoped to the zone. `ZoneProfileData` shows name, checkpoints count, description, created at, last modified (**Created by** / `creator` is omitted from UI only; still returned by API). Embedded checkpoint table hides the **Zone** filter and **Zone** column. Default page size **5**.
+**Zone detail (`/admin/management-zone/view/:zoneId`):** Renders `CheckpointList` scoped to the zone (same component as global checkpoint list, `zoneId` from route params). `ZoneProfileData` shows name, checkpoints count, description, created at, last modified (**Created by** / `creator` is omitted from UI only; still returned by API). Embedded checkpoint table hides the **Zone** filter and **Zone** column. **Create checkpoint** passes `location.state.zoneId` to `/admin/management-checkpoint/create`. **Back** on zone-scoped list returns to `/admin/management-zone`. Default page size **5**.
+
+**Zone view route:** `/admin/management-zone/view/:zoneId` → `CheckpointList` (not a separate `ZoneView` page). Zone profile is the header block above the embedded checkpoint table.
 
 **Frontend files:**
 
@@ -1918,7 +1936,7 @@ Empty description is sent as `null`. Only `name` is required client-side.
 
 **Access:** **Admin** only (`RoleProtectedRoute` + `menu-items/admin.js` → Management → **Checkpoint**). Security Operator and Guard do not see this menu item.
 
-**Architecture:** `views` → `useCheckpointController` / `useCheckpointFormController` / `useCheckpointViewController` → `CheckpointRepository` → `checkpointService` → `api.js`. Zones for dropdowns load via `zoneService` (delegated from `checkpointService.getZones()`).
+**Architecture:** `views` → `useCheckpointController` / `useCheckpointFormController` / `useCheckpointViewController` → `CheckpointRepository` → `checkpointService` → `api.js`. Global checkpoint list still loads zones for the zone filter via `checkpointService.getZones()`; create/edit forms do **not** expose a zone dropdown (zone is fixed from route state or loaded checkpoint).
 
 **API methods (`checkpointService.js`):**
 
@@ -1934,11 +1952,11 @@ Empty description is sent as `null`. Only `name` is required client-side.
 
 **`location_type` (create/edit):** `SelectFieldContainer` dropdown (`LOCATION_TYPE_OPTIONS` in `checkpointConstants.js`). UI labels **Outdoor** / **Indoor**; submitted values **`outdoor`** / **`indoor`** (matches DB enum). Default on create: `outdoor`. On edit, the current checkpoint value is preselected via `normalizeLocationType()`. Client validation rejects any value outside `outdoor` \| `indoor`.
 
-Create receives `zoneId` via React Router `location.state` from `/admin/management-zone/view/:zoneId` → **Create checkpoint**. Edit resolves `zone_id` from the loaded checkpoint (or route state). Switching type on create sets recommended radius (outdoor **20**, indoor **40**). On edit, changing type does **not** auto-change radius — use **Use recommended radius** button.
+Create receives `zoneId` via React Router `location.state` from `/admin/management-zone/view/:zoneId` → **Create checkpoint**. Without zone context, the form shows a warning and is disabled. Edit resolves `zone_id` from the loaded checkpoint (or route state). Switching type on create sets recommended radius (outdoor **20**, indoor **40**). On edit, changing type does **not** auto-change radius — use **Use recommended radius** button.
 
 **Create / edit navigation:** **Back** on `CheckpointCreate` and `CheckpointEdit` returns to `/admin/management-zone/view/{zoneId}` when zone context exists; otherwise falls back to the checkpoint list. Success modal still redirects to checkpoint detail after save.
 
-**Map picker (`CheckpointMapPicker.jsx`):** Leaflet via global `window.L` (CDN in `index.html`). Instruction text: `Click the map or drag the marker to set coordinates. Drag the map to pan. The circle shows the checkpoint radius.` Map click updates lat/lng; marker drag updates lat/lng; map drag only pans. Cursor uses **grab/grabbing** for pan interactions. Radius circle stays synced with current marker location.
+**Map picker (`CheckpointMapPicker.jsx`):** Leaflet via global `window.L` (CDN in `index.html`). Instruction text: `Click the map or drag the marker to set coordinates. Drag the map to pan. The circle shows the checkpoint radius.` Map click and marker `dragend` update form latitude/longitude via `onCoordinatesChange`; map drag only pans. Event handlers use refs (`disabledRef`, `onCoordinatesChangeRef`) so coordinates still update after the form finishes loading (avoids stale `disabled=true` closure from initial render). Cursor uses **grab/grabbing** for pan; marker uses **grab/grabbing** while dragging. Radius circle stays synced with marker position.
 
 **Read-only detail map (`LeafletMap.jsx`):** Instruction text: `Drag the map to pan. The circle shows the checkpoint radius.` No click-to-set and no marker drag on detail view.
 
@@ -1946,10 +1964,32 @@ Create receives `zoneId` via React Router `location.state` from `/admin/manageme
 
 **List UI:** Search by name, filter by zone / active / location type (zone filter hidden on zone detail page), server-side pagination (default **`rowsPerPage` = 5**), view / edit / delete actions. Delete uses `window.confirm` (technical debt — prefer MUI dialog later). Snackbar feedback on delete.
 
-**Detail UI (`CheckpointView`):** `DetailCard` header shows **Edit checkpoint** (`color="primary"`, contained) beside **Back**. **Back** navigates to `/admin/management-zone/view/{zoneId}` using `checkpoint.zone_id` or `checkpoint.zone.id` (falls back to checkpoint list if zone is missing). Profile layout: column 1 — **Name** + **Location type** + **Zone**; column 2 — radius / coordinates; column 3 — **Created** + **Status** + **Last updated**.
+**Detail UI (`CheckpointView`):** `DetailCard` supports optional `headerActions` (Edit button beside Back). **Edit checkpoint** uses `color="primary"`, contained. **Back** navigates to `/admin/management-zone/view/{zoneId}` using `checkpoint.zone_id` or `checkpoint.zone.id` (falls back to checkpoint list if zone is missing). Profile layout: column 1 — **Name** + **Location type**; column 2 — radius / coordinates; column 3 — **Created** + **Status** + **Last updated**.
+
+**Frontend files (checkpoint module):**
+
+| Path | Role |
+| ---- | ---- |
+| `feature/management-checkpoint/views/CheckpointList.jsx` | List (global or zone-scoped) |
+| `feature/management-checkpoint/views/CheckpointCreate.jsx` | Create |
+| `feature/management-checkpoint/views/CheckpointEdit.jsx` | Edit |
+| `feature/management-checkpoint/views/CheckpointView.jsx` | Detail + read-only map |
+| `feature/management-checkpoint/controllers/useCheckpointController.js` | List logic |
+| `feature/management-checkpoint/controllers/useCheckpointFormController.js` | Create/edit logic |
+| `feature/management-checkpoint/controllers/useCheckpointViewController.js` | Detail logic |
+| `feature/management-checkpoint/components/CheckpointForm.jsx` | Shared form |
+| `feature/management-checkpoint/components/CheckpointMapPicker.jsx` | Interactive map (create/edit) |
+| `feature/management-checkpoint/components/LeafletMap.jsx` | Read-only map (view) |
+| `feature/management-checkpoint/utils/checkpointConstants.js` | `LOCATION_TYPE_OPTIONS`, radii, map center |
+| `feature/management-checkpoint/utils/checkpointValidation.js` | Client validation + payload |
+| `feature/management-checkpoint/utils/coordinateUtils.js` | `normalizeCoordinate()` |
+| `feature/management-checkpoint/repositories/checkpointRepository.js` | API normalization |
+| `feature/management-checkpoint/datasources/checkpointService.js` | HTTP client |
+
+**Removed / unused:** `zoneDataSource.js` (mock), `useZoneAddController.js`, `ZoneView.jsx` (zone detail uses scoped `CheckpointList`).
 
 **Delete:** Does not touch PWA IndexedDB or patrol runtime data — only removes the checkpoint record on the server.
 
 ---
 
-_Last updated: document revised for Milestone 11 **patrol replay** on session detail, Milestone 10 **suspicious segment visualization** on patrol monitoring map, Milestone 9 **outbound Web Push** (patrol triggers, test endpoint, SW click routing), Milestone 8 **checkpoint management UI**, Milestone 7 **logout flow** (Profile menu, `clearAuthSession`, Reverb disconnect, cross-tab sign-out), Milestone 6 **role-based route protection** (`RoleProtectedRoute`, role menus, `/patrol`, `/forbidden`), Milestone 5 **realtime patrol monitoring**, Milestone 4 **patrol route map visualization**, Milestone 3 **admin patrol monitoring dashboard**, Milestone 2 **frontend validation integration** (stop patrol → sync → validate → summary), backend Milestone 1 validation engine, Milestone 18 **sync conflict handling** (`resultStatus`, 409/422/duplicate), Milestone 17 **service worker caching**, Milestone 16 **Background Sync**, patrol **`patrolId`** + **`POST /api/pwa/sync`**, **`PatrolPwaStatusPanel`**, and PWA IndexedDB/sync. **`feature/patrol`** is the Laravel-aligned guard reference. Keep this file in sync whenever routing, authentication, API contracts, feature modules, PWA settings, or environment variables change. Source files remain the source of truth._
+_Last updated: includes **zone management** alignment (`management-zone` CRUD, server pagination, zone-scoped checkpoint list), **checkpoint management** updates (zone-fixed forms, `location_type` select, map coordinate handling with `normalizeCoordinate`, navigation back to zone detail, read-only view map), and prior milestones (patrol replay, suspicious segments, Web Push, checkpoint CRUD, logout, role routes, patrol monitoring, PWA sync). Keep this file in sync whenever routing, authentication, API contracts, or feature modules change. Source files remain the source of truth._

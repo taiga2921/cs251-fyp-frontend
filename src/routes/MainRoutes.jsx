@@ -77,7 +77,7 @@ const MainRoutes = {
       element: adminOnly(<DashboardDefault />)
     },
     {
-      path: 'dashboard/default',
+      path: 'dashboard',
       element: adminOnly(<DashboardDefault />)
     },
 
