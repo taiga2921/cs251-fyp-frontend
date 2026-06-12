@@ -21,6 +21,43 @@ export const TRACKING_STATE = Object.freeze({
 const SOURCE_VALUES = new Set(Object.values(LOCATION_SOURCE));
 const TRACKING_VALUES = new Set(Object.values(TRACKING_STATE));
 
+/** @type {Map<string, number>} */
+const lastTimestampByPatrolId = new Map();
+
+async function resolveLastTimestampForPatrol(patrolId) {
+  const cached = lastTimestampByPatrolId.get(patrolId);
+  if (cached != null && cached > 0) {
+    return cached;
+  }
+
+  const rows = await db.location_logs.where('patrolId').equals(patrolId).sortBy('timestamp');
+  const last = rows.length > 0 ? Number(rows[rows.length - 1].timestamp) : 0;
+  if (last > 0) {
+    lastTimestampByPatrolId.set(patrolId, last);
+  }
+
+  return last;
+}
+
+/**
+ * Mobile GPS often repeats `position.timestamp` at second precision; backend movement
+ * validation requires strictly increasing millisecond timestamps per patrol session.
+ */
+async function ensureStrictlyIncreasingTimestamp(patrolId, proposedTimestamp) {
+  let ts = Number(proposedTimestamp);
+  if (!Number.isFinite(ts) || ts <= 0) {
+    ts = Date.now();
+  }
+
+  const lastTs = await resolveLastTimestampForPatrol(patrolId);
+  if (ts <= lastTs) {
+    ts = lastTs + 1;
+  }
+
+  lastTimestampByPatrolId.set(patrolId, ts);
+  return ts;
+}
+
 /** @param {string} v */
 function normalizeSource(v) {
   return SOURCE_VALUES.has(v) ? v : LOCATION_SOURCE.MANUAL;
@@ -40,7 +77,9 @@ export async function saveLocationLog(locationLog) {
   }
 
   const id = crypto.randomUUID();
-  const timestamp = locationLog.timestamp !== undefined && locationLog.timestamp !== null ? locationLog.timestamp : Date.now();
+  const proposedTimestamp =
+    locationLog.timestamp !== undefined && locationLog.timestamp !== null ? locationLog.timestamp : Date.now();
+  const timestamp = await ensureStrictlyIncreasingTimestamp(locationLog.patrolId, proposedTimestamp);
   const source = normalizeSource(locationLog.source);
   const trackingState = normalizeTrackingState(locationLog.trackingState);
   const accuracy = locationLog.accuracy != null && Number.isFinite(Number(locationLog.accuracy)) ? Number(locationLog.accuracy) : null;
