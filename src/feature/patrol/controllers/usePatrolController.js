@@ -279,12 +279,10 @@ export const usePatrolController = (repository) => {
       setFinalizingStep(FINALIZING_STEP.IDLE);
 
       // 1. Create patrol session (canonical id for GPS IndexedDB + `/api/pwa/sync`)
-      const now = new Date().toISOString();
       const patrolData = {
         guard_id: formData.guard_id,
         zone_id: formData.zone_id,
-        time_start: now,
-        time_end: now,
+        time_start: new Date().toISOString(),
         status: 'in_progress',
         completion_percentage: 0
       };
@@ -292,6 +290,15 @@ export const usePatrolController = (repository) => {
       const newPatrol = await repository.createPatrol(patrolData);
       activePatrolSessionIdRef.current = newPatrol?.data?.id ?? null;
       setPatrols(newPatrol);
+
+      const session = newPatrol?.data;
+      if (session?.started_at ?? session?.time_start) {
+        setFormData((prev) => ({
+          ...prev,
+          time_start: session.time_start ?? session.started_at,
+          time_end: session.time_end ?? session.ended_at ?? ''
+        }));
+      }
 
       // 2. Fetch checkpoints for the selected zone (repository + patrolService return a plain array)
       const checkpointList = await repository.getAllCheckpointsByZoneId(formData.zone_id);

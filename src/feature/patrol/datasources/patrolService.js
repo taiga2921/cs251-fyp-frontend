@@ -19,13 +19,19 @@ function mapStatusToPatrolSession(status) {
   return status;
 }
 
-/** Laravel returns nested `user` — expose `guard_id` for existing controller code. */
+/** Laravel returns nested `user` — expose `guard_id` and legacy UI timestamp aliases. */
 function normalizePatrolSessionRecord(session) {
   if (!session || typeof session !== 'object') return session;
   const userId = session.user?.id ?? session.user_id ?? null;
+  const startedAt = session.started_at ?? session.time_start ?? null;
+  const endedAt = session.ended_at ?? session.time_end ?? null;
   return {
     ...session,
-    guard_id: userId
+    guard_id: userId,
+    started_at: startedAt,
+    time_start: startedAt,
+    ended_at: endedAt,
+    time_end: endedAt
   };
 }
 
