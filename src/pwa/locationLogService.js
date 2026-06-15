@@ -9,7 +9,7 @@ export const SYNC_QUEUE_TYPE_LOCATION_LOG = 'location_log';
 export const LOCATION_SOURCE = Object.freeze({
   LIVE: 'live',
   RESUME: 'resume',
-  MANUAL: 'manual'
+  SYNC: 'sync'
 });
 
 export const TRACKING_STATE = Object.freeze({
@@ -60,7 +60,7 @@ async function ensureStrictlyIncreasingTimestamp(patrolId, proposedTimestamp) {
 
 /** @param {string} v */
 function normalizeSource(v) {
-  return SOURCE_VALUES.has(v) ? v : LOCATION_SOURCE.MANUAL;
+  return SOURCE_VALUES.has(v) ? v : LOCATION_SOURCE.SYNC;
 }
 
 /** @param {string} v */

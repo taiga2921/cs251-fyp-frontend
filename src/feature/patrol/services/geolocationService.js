@@ -87,8 +87,8 @@ export function stopPatrolTracking() {
 }
 
 /**
- * One-shot fix + IndexedDB log (manual / resume / live snapshot flows).
- * `source` must be one of `LOCATION_SOURCE` (`live` | `resume` | `manual`).
+ * One-shot fix + IndexedDB log (live / resume snapshot flows).
+ * `source` must be one of `LOCATION_SOURCE` (`live` | `resume` | `sync`).
  */
 /** @returns {Promise<{ position: GeolocationPosition, record: Awaited<ReturnType<typeof saveLocationLog>> }>} */
 export async function capturePatrolLocationSnapshot({ patrolId, userId, source }) {

@@ -38,7 +38,7 @@ db.version(3)
       .table('location_logs')
       .toCollection()
       .modify((row) => {
-        if (row.source === undefined) row.source = 'manual';
+        if (row.source === undefined) row.source = 'sync';
         if (row.trackingState === undefined) row.trackingState = 'active';
       });
   });
@@ -58,5 +58,29 @@ db.version(4)
         if (row.resultStatus === undefined) row.resultStatus = null;
         if (row.errorMessage === undefined) row.errorMessage = null;
         if (row.lastAttempt === undefined) row.lastAttempt = null;
+      });
+  });
+
+db.version(5)
+  .stores({
+    location_logs: 'id, patrolId, userId, timestamp, syncStatus, source, trackingState',
+    sync_queue: 'id, type, status, createdAt, retryCount, resultStatus',
+    patrol_sessions: 'patrolId, status, startTime',
+    notifications: 'id, type, timestamp, read'
+  })
+  .upgrade(async (tx) => {
+    await tx
+      .table('location_logs')
+      .toCollection()
+      .modify((row) => {
+        if (row.source === 'manual') row.source = 'sync';
+      });
+    await tx
+      .table('sync_queue')
+      .toCollection()
+      .modify((row) => {
+        if (row.payload?.source === 'manual') {
+          row.payload = { ...row.payload, source: 'sync' };
+        }
       });
   });

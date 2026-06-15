@@ -18,6 +18,8 @@ export default function CheckpointForm({ controller }) {
     isEdit,
     mapLatitude,
     mapLongitude,
+    recenterLatitude,
+    recenterLongitude,
     handleChange,
     handleCoordinatesChange,
     handleApplyRecommendedRadius,
@@ -134,6 +136,8 @@ export default function CheckpointForm({ controller }) {
           <CheckpointMapPicker
             latitude={mapLatitude}
             longitude={mapLongitude}
+            recenterLatitude={recenterLatitude}
+            recenterLongitude={recenterLongitude}
             radius={formData.radius}
             onCoordinatesChange={handleCoordinatesChange}
             coordinateError={coordinateError}

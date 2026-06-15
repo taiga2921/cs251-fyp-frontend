@@ -21,10 +21,10 @@ export const RECOMMENDED_RADIUS = {
   indoor: 40
 };
 
-/** Kuala Lumpur — default map center when coordinates are unset */
+/** Default map center when coordinates are unset (create form) */
 export const DEFAULT_MAP_CENTER = {
-  latitude: 3.139,
-  longitude: 101.6869
+  latitude: 2.2260014,
+  longitude: 102.455422
 };
 
 export const RADIUS_MIN = 5;

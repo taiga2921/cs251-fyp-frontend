@@ -254,6 +254,14 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
       ? DEFAULT_MAP_CENTER.longitude
       : normalizeCoordinate(formData.longitude, 'longitude', { asNumber: true }) ?? DEFAULT_MAP_CENTER.longitude;
 
+  const hasUserSelectedCoordinates =
+    formData.latitude !== '' &&
+    formData.latitude != null &&
+    formData.longitude !== '' &&
+    formData.longitude != null;
+  const recenterLatitude = hasUserSelectedCoordinates ? mapLatitude : DEFAULT_MAP_CENTER.latitude;
+  const recenterLongitude = hasUserSelectedCoordinates ? mapLongitude : DEFAULT_MAP_CENTER.longitude;
+
   return {
     formData,
     errors,
@@ -267,6 +275,8 @@ export const useCheckpointFormController = (repository, checkpointId = null) => 
     showSuccessModal,
     mapLatitude,
     mapLongitude,
+    recenterLatitude,
+    recenterLongitude,
     handleChange,
     handleCoordinatesChange,
     handleApplyRecommendedRadius,

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { Alert, Box, Typography } from '@mui/material';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Box, IconButton, Tooltip, Typography } from '@mui/material';
+import { IconCurrentLocation as RecenterIcon } from '@tabler/icons-react';
 import { normalizeCoordinate } from '../utils/coordinateUtils';
 
 /** Read-only checkpoint map with radius circle (view page). */
@@ -8,11 +9,25 @@ export default function LeafletMap({ checkpoint }) {
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const circleRef = useRef(null);
+  const recenterTargetRef = useRef({ lat: null, lng: null });
   const [isMapDragging, setIsMapDragging] = useState(false);
 
   const lat = normalizeCoordinate(checkpoint?.latitude, 'latitude', { asNumber: true });
   const lng = normalizeCoordinate(checkpoint?.longitude, 'longitude', { asNumber: true });
   const radius = Number(checkpoint?.radius) > 0 ? Number(checkpoint.radius) : 20;
+
+  useEffect(() => {
+    recenterTargetRef.current = { lat, lng };
+  }, [lat, lng]);
+
+  const handleRecenter = useCallback(() => {
+    const map = mapRef.current;
+    const { lat: targetLat, lng: targetLng } = recenterTargetRef.current;
+    if (!map || !Number.isFinite(targetLat) || !Number.isFinite(targetLng)) return;
+
+    const zoom = map.getZoom() || 17;
+    map.setView([targetLat, targetLng], zoom, { animate: true });
+  }, []);
 
   useEffect(() => {
     if (!window.L || !mapContainerRef.current || !Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -71,22 +86,42 @@ export default function LeafletMap({ checkpoint }) {
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
         Drag the map to pan. The circle shows the checkpoint radius.
       </Typography>
-      <Box
-        ref={mapContainerRef}
-        className={isMapDragging ? 'checkpoint-map-view checkpoint-map-view--dragging' : 'checkpoint-map-view'}
-        sx={{
-          height: 400,
-          width: '100%',
-          borderRadius: 2,
-          overflow: 'hidden',
-          '& .leaflet-container': {
-            cursor: 'grab'
-          },
-          '&.checkpoint-map-view--dragging .leaflet-container': {
-            cursor: 'grabbing'
-          }
-        }}
-      />
+      <Box sx={{ position: 'relative' }}>
+        <Box
+          ref={mapContainerRef}
+          className={isMapDragging ? 'checkpoint-map-view checkpoint-map-view--dragging' : 'checkpoint-map-view'}
+          sx={{
+            height: 400,
+            width: '100%',
+            borderRadius: 2,
+            overflow: 'hidden',
+            '& .leaflet-container': {
+              cursor: 'grab'
+            },
+            '&.checkpoint-map-view--dragging .leaflet-container': {
+              cursor: 'grabbing'
+            }
+          }}
+        />
+        <Tooltip title="Recenter">
+          <IconButton
+            aria-label="Recenter map"
+            onClick={handleRecenter}
+            size="small"
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 1000,
+              bgcolor: 'background.paper',
+              boxShadow: 1,
+              '&:hover': { bgcolor: 'background.paper' }
+            }}
+          >
+            <RecenterIcon size={18} />
+          </IconButton>
+        </Tooltip>
+      </Box>
     </Box>
   );
 }
