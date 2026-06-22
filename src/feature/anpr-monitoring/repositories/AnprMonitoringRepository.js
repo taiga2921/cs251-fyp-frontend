@@ -1,8 +1,5 @@
 import { unwrapPaginatedEnvelope } from '../datasources/anprMonitoringService';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
-
 const IMAGE_TYPE_ORDER = { full: 0, plate: 1, annotated: 2 };
 
 const parseConfidence = (value) => {
@@ -24,13 +21,12 @@ const formatDetectionTime = (value) => {
 const resolvePreviewUrl = (image) => {
   if (!image || typeof image !== 'object') return null;
 
-  const candidates = [image.url, image.image_url, image.public_url, image.file_url, image.file_path].filter(Boolean);
+  const candidates = [image.url, image.image_url, image.public_url, image.file_url].filter(Boolean);
 
   for (const candidate of candidates) {
     const value = String(candidate).trim();
     if (!value) continue;
     if (/^https?:\/\//i.test(value)) return value;
-    if (value.startsWith('/storage/')) return `${BACKEND_ORIGIN}${value}`;
   }
 
   return null;
@@ -43,10 +39,10 @@ const normalizeCamera = (camera) => {
     name: camera.name ?? 'Unknown camera',
     location: camera.location ?? null,
     ipAddress: camera.ip_address ?? null,
+    port: camera.port ?? null,
     isActive: Boolean(camera.is_active),
     latitude: camera.latitude ?? null,
-    longitude: camera.longitude ?? null,
-    raw: camera
+    longitude: camera.longitude ?? null
   };
 };
 
@@ -59,8 +55,7 @@ const normalizeVehicle = (vehicle) => {
     vehicleType: vehicle.vehicle_type ?? null,
     status: vehicle.status ?? null,
     source: vehicle.source ?? null,
-    notes: vehicle.notes ?? null,
-    raw: vehicle
+    notes: vehicle.notes ?? null
   };
 };
 
@@ -78,22 +73,7 @@ const normalizeImage = (image) => {
     fileSize: image.file_size ?? null,
     resolution: image.resolution ?? null,
     expiresAt: image.expires_at ?? null,
-    previewUrl,
-    raw: image
-  };
-};
-
-const normalizeLog = (log) => {
-  if (!log || typeof log !== 'object') return null;
-
-  return {
-    id: log.id ?? null,
-    anprEventId: log.anpr_event_id ?? null,
-    stage: log.stage ?? 'unknown',
-    message: log.message ?? null,
-    createdAt: log.created_at ?? null,
-    formattedCreatedAt: formatDetectionTime(log.created_at),
-    raw: log
+    previewUrl
   };
 };
 
@@ -103,13 +83,6 @@ const sortImages = (images) =>
     const orderB = IMAGE_TYPE_ORDER[b.imageType] ?? 99;
     if (orderA !== orderB) return orderA - orderB;
     return String(a.id ?? '').localeCompare(String(b.id ?? ''));
-  });
-
-const sortLogs = (logs) =>
-  [...logs].sort((a, b) => {
-    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return ta - tb;
   });
 
 export class AnprMonitoringRepository {
@@ -122,6 +95,32 @@ export class AnprMonitoringRepository {
       throw new Error(envelope?.message || fallbackMessage);
     }
     return envelope;
+  }
+
+  buildListQueryParams(filters = {}, page = 0, rowsPerPage = 10) {
+    const params = {
+      page: page + 1,
+      per_page: rowsPerPage
+    };
+
+    const plateSearch = String(filters.plateSearch ?? '').trim();
+    if (plateSearch) {
+      params.plate_number = plateSearch;
+    }
+
+    if (filters.validity === 'valid') {
+      params.is_valid = 1;
+    } else if (filters.validity === 'invalid') {
+      params.is_valid = 0;
+    }
+
+    if (filters.flagged === 'flagged') {
+      params.is_flagged = 1;
+    } else if (filters.flagged === 'unflagged') {
+      params.is_flagged = 0;
+    }
+
+    return params;
   }
 
   async getAnprEvents(params = {}) {
@@ -158,20 +157,6 @@ export class AnprMonitoringRepository {
     return sortImages(rows.map((image) => normalizeImage(image)).filter(Boolean));
   }
 
-  async getAnprEventLogsFallback(anprEventId) {
-    const envelope = this.assertSuccess(
-      await this.dataSource.getAnprEventLogs({ per_page: 100 }),
-      'Failed to load ANPR event logs'
-    );
-    const { rows } = unwrapPaginatedEnvelope(envelope);
-    return sortLogs(
-      rows
-        .filter((log) => String(log?.anpr_event_id) === String(anprEventId))
-        .map((log) => normalizeLog(log))
-        .filter(Boolean)
-    );
-  }
-
   normalizeEvent(event) {
     if (!event || typeof event !== 'object') return null;
 
@@ -185,12 +170,6 @@ export class AnprMonitoringRepository {
       if (image.imageType) acc[image.imageType] = image;
       return acc;
     }, {});
-
-    const logs = sortLogs(
-      (Array.isArray(event.logs) ? event.logs : [])
-        .map((log) => normalizeLog(log))
-        .filter(Boolean)
-    );
 
     const confidence = parseConfidence(event.confidence);
     const evidenceCount = images.length;
@@ -210,38 +189,8 @@ export class AnprMonitoringRepository {
       vehicle: normalizeVehicle(event.vehicle),
       images,
       imageMap,
-      logs,
       evidenceCount,
-      hasEvidence: evidenceCount > 0,
-      raw: event
+      hasEvidence: evidenceCount > 0
     };
-  }
-
-  filterEvents(events, filters = {}) {
-    const plateNeedle = String(filters.plateSearch ?? '')
-      .trim()
-      .toLowerCase();
-    const validityFilter = filters.validity ?? 'all';
-    const flaggedFilter = filters.flagged ?? 'all';
-
-    return events.filter((event) => {
-      if (plateNeedle) {
-        const plate = String(event.plateNumber ?? '').toLowerCase();
-        if (!plate.includes(plateNeedle)) return false;
-      }
-
-      if (validityFilter === 'valid' && !event.isValid) return false;
-      if (validityFilter === 'invalid' && event.isValid) return false;
-
-      if (flaggedFilter === 'flagged' && !event.isFlagged) return false;
-      if (flaggedFilter === 'unflagged' && event.isFlagged) return false;
-
-      return true;
-    });
-  }
-
-  paginateEvents(events, page, rowsPerPage) {
-    const start = page * rowsPerPage;
-    return events.slice(start, start + rowsPerPage);
   }
 }

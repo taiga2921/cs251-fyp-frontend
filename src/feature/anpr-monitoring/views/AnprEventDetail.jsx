@@ -9,7 +9,6 @@ import { AnprMonitoringRepository } from '../repositories/AnprMonitoringReposito
 import { useAnprEventDetailController } from '../controllers/useAnprMonitoringController';
 import AnprEventSummaryCards from '../components/AnprEventSummaryCards';
 import AnprEvidenceGallery from '../components/AnprEvidenceGallery';
-import AnprEventLogs from '../components/AnprEventLogs';
 import AnprStatusChip from '../components/AnprStatusChip';
 
 export default function AnprEventDetail() {
@@ -72,7 +71,6 @@ export default function AnprEventDetail() {
 
         <AnprEventSummaryCards event={event} />
         <AnprEvidenceGallery images={event.images} imageMap={event.imageMap} />
-        <AnprEventLogs logs={event.logs} />
       </Stack>
     </MainCard>
   );

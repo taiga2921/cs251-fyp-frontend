@@ -81,15 +81,6 @@ const anprMonitoringService = {
     } catch (error) {
       throw buildServiceError(error, 'fetch ANPR images');
     }
-  },
-
-  getAnprEventLogs: async (params = {}) => {
-    try {
-      const response = await api.get(`/anpr-event-logs${buildQueryString(params)}`);
-      return response.data;
-    } catch (error) {
-      throw buildServiceError(error, 'fetch ANPR event logs');
-    }
   }
 };
 

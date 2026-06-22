@@ -7,11 +7,6 @@ const DEFAULT_FILTERS = {
   flagged: 'all'
 };
 
-const hasActiveFilters = (filters) =>
-  Boolean(String(filters.plateSearch ?? '').trim()) ||
-  filters.validity !== 'all' ||
-  filters.flagged !== 'all';
-
 export const useAnprMonitoringController = (repository) => {
   const navigate = useNavigate();
 
@@ -34,34 +29,16 @@ export const useAnprMonitoringController = (repository) => {
         }
         setError(null);
 
-        const filterActive = hasActiveFilters(filters);
+        const params = repository.buildListQueryParams(filters, page, rowsPerPage);
+        const { events: rows, pagination: meta } = await repository.getAnprEvents(params);
 
-        if (filterActive) {
-          const { events: allEvents } = await repository.getAnprEvents({ per_page: 100, page: 1 });
-          const filtered = repository.filterEvents(allEvents, filters);
-          const paged = repository.paginateEvents(filtered, page, rowsPerPage);
-
-          setEvents(paged);
-          setPagination({
-            total: filtered.length,
-            page: page + 1,
-            perPage: rowsPerPage,
-            lastPage: Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-          });
-        } else {
-          const { events: rows, pagination: meta } = await repository.getAnprEvents({
-            page: page + 1,
-            per_page: rowsPerPage
-          });
-
-          setEvents(rows);
-          setPagination({
-            total: meta.total,
-            page: meta.page,
-            perPage: meta.perPage,
-            lastPage: meta.lastPage
-          });
-        }
+        setEvents(rows);
+        setPagination({
+          total: meta.total,
+          page: meta.page,
+          perPage: meta.perPage,
+          lastPage: meta.lastPage
+        });
       } catch (err) {
         setError(err.message || 'Failed to load ANPR events');
         setEvents([]);
@@ -173,13 +150,6 @@ export const useAnprEventDetailController = (repository) => {
               evidenceCount: images.length,
               hasEvidence: images.length > 0
             };
-          }
-        }
-
-        if (!normalized.logs?.length) {
-          const logs = await repository.getAnprEventLogsFallback(anprEventId);
-          if (logs.length) {
-            normalized = { ...normalized, logs };
           }
         }
 

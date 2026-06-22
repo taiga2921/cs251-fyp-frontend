@@ -1,12 +1,17 @@
+import { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Card, CardContent, CardMedia, Chip, Grid, Stack, Typography } from '@mui/material';
+import { Box, Card, CardContent, CardMedia, Chip, CircularProgress, Grid, Stack, Typography } from '@mui/material';
 import { IconPhotoOff } from '@tabler/icons-react';
+
+import { getAuthToken } from 'utils/auth';
 
 const IMAGE_TYPE_LABELS = {
   full: 'Full frame',
   plate: 'Plate crop',
   annotated: 'Annotated'
 };
+
+const PROTECTED_FILE_PATTERN = /\/anpr-images\/[^/]+\/file(?:\?|$)/i;
 
 function formatFileSize(bytes) {
   const value = Number(bytes);
@@ -16,41 +21,150 @@ function formatFileSize(bytes) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function requiresAuthenticatedFetch(url) {
+  return Boolean(url && PROTECTED_FILE_PATTERN.test(url));
+}
+
+function UnavailablePreview() {
+  return (
+    <Box
+      sx={{
+        height: 200,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor: 'grey.50',
+        borderBottom: '1px solid',
+        borderColor: 'divider'
+      }}
+    >
+      <Stack spacing={1} alignItems="center" sx={{ px: 2, textAlign: 'center' }}>
+        <IconPhotoOff size={36} stroke={1.25} opacity={0.5} />
+        <Typography variant="body2" color="text.secondary">
+          Preview unavailable
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Evidence is shown when Laravel can resolve the file under configured ANPR image roots.
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}
+
+function EvidencePreview({ previewUrl, alt, onFailed }) {
+  const [resolvedSrc, setResolvedSrc] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let objectUrl;
+    let cancelled = false;
+
+    setResolvedSrc(null);
+    setLoading(true);
+
+    if (!previewUrl) {
+      setLoading(false);
+      onFailed?.();
+      return undefined;
+    }
+
+    if (!requiresAuthenticatedFetch(previewUrl)) {
+      setResolvedSrc(previewUrl);
+      setLoading(false);
+      return undefined;
+    }
+
+    const token = getAuthToken();
+    fetch(previewUrl, {
+      headers: {
+        Accept: 'image/*,*/*',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Failed to load protected evidence image');
+        }
+        return response.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setResolvedSrc(objectUrl);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoading(false);
+          onFailed?.();
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [previewUrl, onFailed]);
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          height: 200,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: 'grey.50',
+          borderBottom: '1px solid',
+          borderColor: 'divider'
+        }}
+      >
+        <CircularProgress size={28} />
+      </Box>
+    );
+  }
+
+  if (!resolvedSrc) {
+    return null;
+  }
+
+  return (
+    <CardMedia
+      component="img"
+      image={resolvedSrc}
+      alt={alt}
+      sx={{ height: 200, objectFit: 'cover', bgcolor: 'grey.100' }}
+    />
+  );
+}
+
+EvidencePreview.propTypes = {
+  previewUrl: PropTypes.string,
+  alt: PropTypes.string.isRequired,
+  onFailed: PropTypes.func
+};
+
 function EvidenceCard({ imageType, image }) {
   const label = IMAGE_TYPE_LABELS[imageType] ?? imageType;
-  const hasPreview = Boolean(image?.previewUrl);
+  const previewUrl = image?.previewUrl ?? null;
+  const [previewFailed, setPreviewFailed] = useState(!previewUrl);
+
+  useEffect(() => {
+    setPreviewFailed(!previewUrl);
+  }, [previewUrl, image?.id]);
 
   return (
     <Card variant="outlined" sx={{ height: '100%' }}>
-      {hasPreview ? (
-        <CardMedia
-          component="img"
-          image={image.previewUrl}
-          alt={`${label} evidence`}
-          sx={{ height: 200, objectFit: 'cover', bgcolor: 'grey.100' }}
-        />
+      {previewFailed ? (
+        <UnavailablePreview />
       ) : (
-        <Box
-          sx={{
-            height: 200,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            bgcolor: 'grey.50',
-            borderBottom: '1px solid',
-            borderColor: 'divider'
-          }}
-        >
-          <Stack spacing={1} alignItems="center" sx={{ px: 2, textAlign: 'center' }}>
-            <IconPhotoOff size={36} stroke={1.25} opacity={0.5} />
-            <Typography variant="body2" color="text.secondary">
-              Preview unavailable
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Evidence path is stored as metadata and may not be browser-loadable.
-            </Typography>
-          </Stack>
-        </Box>
+        <EvidencePreview
+          previewUrl={previewUrl}
+          alt={`${label} evidence`}
+          onFailed={() => setPreviewFailed(true)}
+        />
       )}
 
       <CardContent>
