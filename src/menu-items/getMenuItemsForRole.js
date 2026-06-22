@@ -6,7 +6,7 @@ import operator from './operator';
 import admin from './admin';
 import patrolHome from './patrolHome';
 
-const OPERATOR_MONITORING_CHILD_IDS = new Set(['operator-patrol-monitoring']);
+const OPERATOR_MONITORING_CHILD_IDS = new Set(['operator-patrol-monitoring', 'operator-anpr-monitoring']);
 
 /**
  * Operator sidebar for Security Operator — monitoring only (live/history routes are admin-only).

@@ -1,10 +1,11 @@
 // assets
-import { IconAlertOctagon, IconBarrierBlock, IconChartDots3, IconMapPin2 } from '@tabler/icons-react';
+import { IconAlertOctagon, IconBarrierBlock, IconCar, IconChartDots3, IconMapPin2 } from '@tabler/icons-react';
 
 // constant
 const icons = {
   IconAlertOctagon,
   IconBarrierBlock,
+  IconCar,
   IconChartDots3,
   IconMapPin2
 };
@@ -24,6 +25,13 @@ const operator = {
       type: 'item',
       url: '/admin/patrol-monitoring',
       icon: icons.IconMapPin2
+    },
+    {
+      id: 'operator-anpr-monitoring',
+      title: 'ANPR Monitoring',
+      type: 'item',
+      url: '/admin/anpr-monitoring',
+      icon: icons.IconCar
     },
     // {
     //   id: 'operator-patrol',

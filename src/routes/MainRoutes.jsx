@@ -38,6 +38,9 @@ const AdminCheckpointManagementEdit = Loadable(lazy(() => import('../feature/man
 const AdminPatrolMonitoring = Loadable(lazy(() => import('../feature/patrol-monitoring/views/PatrolMonitoringDashboard')));
 const AdminPatrolSessionDetail = Loadable(lazy(() => import('../feature/patrol-monitoring/views/PatrolSessionDetail')));
 
+const AdminAnprMonitoring = Loadable(lazy(() => import('../feature/anpr-monitoring/views/AnprEventList')));
+const AdminAnprEventDetail = Loadable(lazy(() => import('../feature/anpr-monitoring/views/AnprEventDetail')));
+
 const Forbidden = Loadable(lazy(() => import('views/errors/Forbidden')));
 
 // utilities routing
@@ -164,6 +167,14 @@ const MainRoutes = {
     {
       path: 'admin/patrol-monitoring/:patrolSessionId',
       element: adminOrOperator(<AdminPatrolSessionDetail />)
+    },
+    {
+      path: 'admin/anpr-monitoring',
+      element: adminOrOperator(<AdminAnprMonitoring />)
+    },
+    {
+      path: 'admin/anpr-monitoring/:anprEventId',
+      element: adminOrOperator(<AdminAnprEventDetail />)
     },
 
     {
