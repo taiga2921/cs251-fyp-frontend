@@ -765,7 +765,7 @@ Laravel **`ZoneController@index`** returns **`{ success, message, data }`** wher
 | `getAnprEventById`  | `GET /anpr-events/{id}`                        | Primary detail source; includes safe nested `camera`, `vehicle`, `images`.                                                                                                                            |
 | `getAnprImages`     | `GET /anpr-images`                             | Fallback when detail has no images (`anpr_event_id`, `per_page=100`).                                                                                                                               |
 
-**Evidence previews:** `AnprImageResource` may return `url` / `image_url` pointing to `GET /anpr-images/{id}/file`. `AnprEvidenceGallery` fetches protected URLs with the JWT `Authorization` header and renders a blob preview; otherwise shows a metadata placeholder card.
+**Evidence previews:** `AnprImageResource` returns `url` / `image_url` pointing to `GET /anpr-images/{id}/file` when Laravel can resolve the stored path (upload mode uses `storage/app/anpr` by default). `AnprEvidenceGallery` fetches protected URLs with the JWT `Authorization` header and renders a blob preview; otherwise shows a placeholder. No event logs or raw metadata are rendered.
 
 ### Authentication Token Handling
 
