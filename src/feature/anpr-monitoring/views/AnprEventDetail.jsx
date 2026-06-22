@@ -1,13 +1,5 @@
 import { useRef } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Paper,
-  Stack,
-  Typography
-} from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Stack } from '@mui/material';
 import { IconRefresh } from '@tabler/icons-react';
 
 import MainCard from 'ui-component/cards/MainCard';
@@ -75,37 +67,12 @@ export default function AnprEventDetail() {
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           <AnprStatusChip kind="validity" value={event.isValid ? 'valid' : 'invalid'} />
           <AnprStatusChip kind="flagged" value={event.isFlagged ? 'flagged' : 'unflagged'} />
-          <AnprStatusChip
-            kind="evidence"
-            value={event.hasEvidence ? 'available' : 'missing'}
-          />
+          <AnprStatusChip kind="evidence" value={event.hasEvidence ? 'available' : 'missing'} />
         </Stack>
 
         <AnprEventSummaryCards event={event} />
         <AnprEvidenceGallery images={event.images} imageMap={event.imageMap} />
         <AnprEventLogs logs={event.logs} />
-
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Raw metadata
-          </Typography>
-          <Box
-            component="pre"
-            sx={{
-              m: 0,
-              p: 1.5,
-              bgcolor: 'grey.50',
-              borderRadius: 1,
-              overflow: 'auto',
-              fontSize: '0.75rem',
-              fontFamily: 'monospace',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word'
-            }}
-          >
-            {JSON.stringify(event.raw, null, 2)}
-          </Box>
-        </Paper>
       </Stack>
     </MainCard>
   );
