@@ -41,6 +41,7 @@ The frontend currently provides:
 - **Progressive Web App (PWA)** support via `vite-plugin-pwa` (service worker precache, web app manifest, optional **Install App** UI in the sidebar when the browser fires `beforeinstallprompt`).
 - **PWA client layer (`src/pwa/`)** — offline-aware UX (`NetworkSnackbar`), Dexie **IndexedDB** for patrol location logs and a **sync queue**, a **`flushSyncQueue`** sync engine posting to `POST /api/pwa/sync`, **Background Sync** (tag **`pwa-sync-queue`**: SW notifies clients → app-thread flush; falls back to **`online`** + **Retry Sync** when unsupported), **`pushNotificationService`** (subscribe/unsubscribe → `POST/DELETE /api/push-subscriptions`; **outbound** test → `POST /api/push-notifications/test`), and shared **`useNetworkStatus`**. Custom SW: **`public/push-handlers.js`** (push display + **`notificationclick`** deep links + Background **`sync`**).
 - **Patrol module (`feature/patrol`)** — single guard page **`views/PartrolHome.jsx`** + **`usePatrolController`**: creates Laravel **`patrol_sessions`** and **`checkpoint-events`** placeholders, posts GPS breadcrumbs to **`POST /patrol-routes`**, and drives live GPS only via **`feature/patrol/services/geolocationService`** ( **`saveLocationLog`** → Dexie + **`sync_queue`**). **Stop Patrol** runs: flush PWA sync → **`POST /patrol-sessions/{id}/validate`** (when online) → **`GET /patrol-sessions/{id}/summary`**; results in **`PatrolSummaryCard.jsx`** (backend validation section + final summary). Live geofence PATCH confidence (80/65) remains **provisional** until backend validation. **`components/PatrolTracking.jsx`** is presentational; **`PatrolPwaStatusPanel.jsx`** shows sync/GPS telemetry and sync-queue warnings. Raw **`navigator.geolocation`** is not used from the controller.
+- **ANPR Monitoring (`feature/anpr-monitoring`)** — **M10** admin/operator module at **`/admin/anpr-monitoring`**: lists ANPR detections from Laravel with server-side filters (plate, validity, flagged), shows event detail with summary cards and evidence gallery; evidence previews load via backend `url` / `image_url` and JWT-authenticated fetch to **`GET /anpr-images/{id}/file`**; no event logs or raw metadata in the UI.
 
 ### Core Functionality
 
@@ -58,6 +59,7 @@ The frontend currently provides:
 | Camera management          | **Partially implemented**            | Menu item exists; dedicated UI not complete.                                                                                                                                                                                                                                                                                                                                                                                       |
 | Patrol Home (`/patrol`)    | **Implemented (functional)**         | `feature/patrol` — **all roles** (Admin, Security Operator, Guard); Laravel **`patrol_sessions.id`** is end-to-end **`patrolId`** (Dexie **`location_logs.patrolId`** and **`POST /pwa/sync`** payload **`patrolId`** match); checkpoints via **`checkpoint-events`**; route crumbs via **`POST /patrol-routes`**; GPS via **`usePatrolController`** + **`services/geolocationService`**; **`PatrolPwaStatusPanel`**. See [Section 15](#15-progressive-web-app-pwa). |
 | Patrol Monitoring          | **Implemented**                      | `feature/patrol-monitoring` — **Admin + Security Operator only**; dashboard + session detail at **`/admin/patrol-monitoring`**; sidebar item under **Operator** group with **`IconMapPin2`**; lists patrol sessions, summaries, checkpoint events, **route map** (Leaflet CDN) with **suspicious segment overlays** (Milestone 10) and **patrol replay** (Milestone 11); **live updates** via Laravel Reverb + Echo (30s polling fallback); **Re-run Validation** calls backend **`POST …/validate`**. |
+| ANPR Monitoring            | **Implemented**                      | `feature/anpr-monitoring` — **Admin + Security Operator only**; list + detail at **`/admin/anpr-monitoring`**; sidebar **ANPR Monitoring** (`IconCar`); server-side filters via **`GET /anpr-events`**; evidence gallery with protected file previews; manual refresh only (no realtime). |
 | PWA offline / sync         | **Implemented (core)**               | IndexedDB + sync queue + global **`NetworkSnackbar`**; **`POST /api/pwa/sync`** (**JWT**) drains **`location_log`** rows idempotently. **Background Sync** registers tag **`pwa-sync-queue`** when the queue has work; SW **`sync`** posts **`PWA_SYNC_REQUEST`** to clients → **`flushSyncQueue`**. **Retry Sync** + auto-flush on **`online`** remain when Background Sync is unavailable.                                       |
 | Web Push (PWA)             | **Implemented**                      | Subscribe/unsubscribe + **outbound** patrol alerts from Laravel (`WebPushNotificationService`). **`PatrolPwaStatusPanel`**: permission/subscription state, **Send Test Notification** (`POST /push-notifications/test` — `success: true` only when at least one device receives the push; `data` includes delivery counts). Reverb realtime remains separate.                                                                      |
 | Theme Customization        | Implemented                          | Font family + border radius drawer (toggle button itself is currently commented out).                                                                                                                                                                                                                                                                                                                                              |
@@ -69,6 +71,7 @@ The frontend currently provides:
 - `feature/management-checkpoint` — admin checkpoint CRUD with Leaflet map picker.
 - `feature/patrol` — guard patrol session UI + **`usePatrolController`** + Laravel patrol/checkpoint/route APIs + patrol geolocation service.
 - `feature/patrol-monitoring` — admin/operator patrol surveillance dashboard (session list, detail, re-validation).
+- `feature/anpr-monitoring` — admin/operator ANPR detection monitoring (event list, detail, evidence gallery).
 - `pwa/` — Dexie IndexedDB, offline sync queue flush, network hook, browser geolocation primitives.
 - `views/dashboard/Default` — demo dashboard.
 - `views/pages/authentication` — Login + Register pages.
@@ -341,7 +344,7 @@ frontend-react-v1/
 
 ### `src/feature/`
 
-Multiple feature folders exist (e.g. `management-user`, `management-zone`, `patrol`, `feature/authentication`, …). The tree below documents **`management-user`** as the reference Clean-Architecture example.
+Multiple feature folders exist (e.g. `management-user`, `management-zone`, `patrol`, `patrol-monitoring`, `anpr-monitoring`, `feature/authentication`, …). The tree below documents **`management-user`** as the reference Clean-Architecture example.
 
 ```
 feature/management-user/
@@ -575,6 +578,8 @@ Defined in `src/routes/MainRoutes.jsx`. Wrapped in `ProtectedRoute` — unauthen
 | `/admin/management-checkpoint/:checkpointId/edit` | `CheckpointEdit`                         | `MainLayout` | **Admin only** — edit (zone from checkpoint).                   |
 | `/admin/patrol-monitoring`                        | `PatrolMonitoringDashboard`              | `MainLayout` | **Admin + Security Operator**.                                  |
 | `/admin/patrol-monitoring/:patrolSessionId`       | `PatrolSessionDetail`                    | `MainLayout` | **Admin + Security Operator**.                                  |
+| `/admin/anpr-monitoring`                          | `AnprEventList`                          | `MainLayout` | **Admin + Security Operator** — ANPR event list.                |
+| `/admin/anpr-monitoring/:anprEventId`               | `AnprEventDetail`                        | `MainLayout` | **Admin + Security Operator** — ANPR event detail.              |
 | `/operator/patrol/*`                              | operator patrol views                    | `MainLayout` | **Admin only** (legacy operator module).                        |
 | `/typography`                                     | `views/utilities/Typography`             | `MainLayout` | Typography showcase.                                            |
 | `/color`                                          | `views/utilities/Color`                  | `MainLayout` | Color showcase.                                                 |
@@ -593,6 +598,8 @@ Admin namespace routes under `/admin/*` use **`RoleProtectedRoute`** (JWT + role
 | `/admin/management-checkpoint` (+ create, view, edit) | Checkpoint management                  | Admin                    |
 | `/admin/patrol-monitoring`                            | `PatrolMonitoringDashboard`            | Admin, Security Operator |
 | `/admin/patrol-monitoring/:patrolSessionId`           | `PatrolSessionDetail`                  | Admin, Security Operator |
+| `/admin/anpr-monitoring`                              | `AnprEventList`                        | Admin, Security Operator |
+| `/admin/anpr-monitoring/:anprEventId`                 | `AnprEventDetail`                      | Admin, Security Operator |
 
 ### Role-based access (Milestone 6)
 
@@ -600,8 +607,8 @@ Seeded backend roles: **Admin**, **Security Operator**, **Guard**.
 
 | Role                  | Routes                                                                   | Sidebar menu (`getMenuItemsForRole`)                                                   | Default home               |
 | --------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | -------------------------- |
-| **Admin**             | Dashboard, all `/admin/*` management, patrol monitoring, `/patrol`, operator module (live/history) | Dashboard + Patrol Home + Admin → Management (User, Zone, **Checkpoint**, Camera) + Operator (**Patrol Monitoring**, Patrol live/history) | `/dashboard`               |
-| **Security Operator** | `/admin/patrol-monitoring` (+ session detail), `/patrol`                   | Operator → **Patrol Monitoring** (`IconMapPin2`) + Patrol Home                         | `/admin/patrol-monitoring` |
+| **Admin**             | Dashboard, all `/admin/*` management, patrol monitoring, ANPR monitoring, `/patrol`, operator module (live/history) | Dashboard + Patrol Home + Admin → Management (User, Zone, **Checkpoint**, Camera) + Operator (**Patrol Monitoring**, **ANPR Monitoring**, Patrol live/history) | `/dashboard`               |
+| **Security Operator** | `/admin/patrol-monitoring` (+ session detail), `/admin/anpr-monitoring` (+ event detail), `/patrol`                   | Operator → **Patrol Monitoring** (`IconMapPin2`), **ANPR Monitoring** (`IconCar`) + Patrol Home                         | `/admin/patrol-monitoring` |
 | **Guard**             | `/patrol` (no patrol monitoring)                                         | Guard → Patrol                                                                         | `/patrol`                  |
 
 **Utilities:** `src/utils/auth.js` — `getAuthUser()`, `getAuthUserRole()`, `hasRole()`, `hasAnyRole()`, `ALL_ROLES`, `getDefaultRouteForRole()`, `validateAuthSession()`, `clearAuthSession()` (clears `access_token` + `auth_user`).
@@ -749,6 +756,16 @@ Laravel **`ZoneController@index`** returns **`{ success, message, data }`** wher
 **PWA offline sync** — `src/pwa/syncService.js` calls **`api.post('/pwa/sync', payload)`** with each **`sync_queue`** row’s **`payload`** (must align with backend **`SyncPwaLocationLogRequest`**: **`patrolId`** = **`patrol_sessions.id`**). Successful responses mark the queue row **`synced`** and, for **`location_log`** entries, set **`location_logs.syncStatus`** to **`synced`**.
 
 **`patrolRepository.createPatrolRoute`** returns the **full** Laravel-style envelope (**`{ success, message, data }`**) from **`patrolService`** so **`usePatrolController`** can gate UI updates on **`response.success`**.
+
+`src/feature/anpr-monitoring/datasources/anprMonitoringService.js` (via **`AnprMonitoringRepository`** / **`useAnprMonitoringController`**):
+
+| Method              | HTTP call                                      | Notes                                                                                                                                                                                                 |
+| ------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getAnprEvents`     | `GET /anpr-events`                             | Query: `page`, `per_page`, `plate_number`, `is_valid`, `is_flagged` (built by `repository.buildListQueryParams`). Backend also supports `search`, `date_from`, `date_to`, `camera_id` when needed. |
+| `getAnprEventById`  | `GET /anpr-events/{id}`                        | Primary detail source; includes safe nested `camera`, `vehicle`, `images`.                                                                                                                            |
+| `getAnprImages`     | `GET /anpr-images`                             | Fallback when detail has no images (`anpr_event_id`, `per_page=100`).                                                                                                                               |
+
+**Evidence previews:** `AnprImageResource` may return `url` / `image_url` pointing to `GET /anpr-images/{id}/file`. `AnprEvidenceGallery` fetches protected URLs with the JWT `Authorization` header and renders a blob preview; otherwise shows a metadata placeholder card.
 
 ### Authentication Token Handling
 
@@ -916,7 +933,7 @@ See [Section 4](#4-routing-documentation). Implemented entirely client-side via:
 ### Role-Based Rendering / Permission Handling
 
 - **Routes:** `RoleProtectedRoute` per route in `MainRoutes.jsx`.
-- **Menu:** `menu-items/getMenuItemsForRole.js` — sidebar and breadcrumbs use role-filtered items.
+- **Menu:** `menu-items/getMenuItemsForRole.js` — sidebar and breadcrumbs use role-filtered items. Operator group includes **Patrol Monitoring** (`IconMapPin2`) and **ANPR Monitoring** (`IconCar`); Security Operator sees both via `OPERATOR_MONITORING_CHILD_IDS`.
 - **Profile:** `ProfileSection` shows `auth_user.name` and `getAuthUserRole()`.
 - **Login:** `AuthLogin` navigates to `getDefaultRouteForRole()` after storing user + token.
 
@@ -1840,6 +1857,33 @@ Each overlay has a Leaflet popup: type, severity, message, time range, distance/
 **Map library:** No npm `leaflet` package — reuses global **`window.L`** (Leaflet 1.9.4 CDN in `index.html`), same pattern as `feature/management-checkpoint/components/LeafletMap.jsx`.
 
 **Provisional vs authoritative:** Dashboard reflects backend-persisted `checkpoint_events` after validation; guard live PATCH scores remain provisional until validate runs.
+
+### ANPR monitoring dashboard (Milestone 10)
+
+**Module:** `src/feature/anpr-monitoring/` — view → controller → repository → `anprMonitoringService`.
+
+| File                                           | Role                                                                                                      |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `views/AnprEventList.jsx`                      | List page: filters, table, pagination, refresh                                                              |
+| `views/AnprEventDetail.jsx`                    | Detail page: status chips, summary cards, evidence gallery, back/refresh                                  |
+| `controllers/useAnprMonitoringController.js`   | `useAnprMonitoringController` (list) + `useAnprEventDetailController` (detail); local state only          |
+| `repositories/AnprMonitoringRepository.js`     | Normalize events/images; build backend filter query params; unwrap Laravel paginator                        |
+| `datasources/anprMonitoringService.js`         | Laravel API adapter (`/anpr-events`, `/anpr-images`)                                                     |
+| `components/AnprEventTable.jsx`                | Detection table                                                                                           |
+| `components/AnprEventSummaryCards.jsx`         | Plate, confidence, camera, vehicle, coordinates                                                         |
+| `components/AnprEvidenceGallery.jsx`           | Ordered full/plate/annotated cards; JWT blob fetch for protected file URLs                                |
+| `components/AnprStatusChip.jsx`                | Validity, flagged, evidence chips                                                                         |
+| `components/AnprEmptyState.jsx`                | Empty list placeholder                                                                                    |
+
+**List:** `GET /anpr-events` with server pagination and filters (`plate_number`, `is_valid`, `is_flagged`). Manual **Refresh** reloads the current page.
+
+**Detail:** `GET /anpr-events/{id}` first; `GET /anpr-images?anpr_event_id=…` only when images are missing from the detail payload. Displays summary + evidence only — **no** event logs and **no** raw metadata panel.
+
+**Security:** Does not render `event.raw` or backend lifecycle logs. Camera credentials are omitted from ANPR API responses via `AnprCameraResource` on the backend.
+
+**Known limitation:** No realtime ANPR feed; manual refresh only.
+
+**Cross-repo doc:** `ai-anpr-v1/docs/m10-frontend-anpr-feature-architecture.md`
 
 ### Sidebar install UX
 
