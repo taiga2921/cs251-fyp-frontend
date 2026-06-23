@@ -1,70 +1,86 @@
 import PropTypes from 'prop-types';
-import { Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
+import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
+
+import { TableActionButtons } from 'ui-component/table/TableActionButtons';
+import { TableEmptyRow } from 'ui-component/table/TableEmptyRow';
+import { standardTableHeadCellSx, standardTablePaperSx, standardTableRowSx } from 'ui-component/table/tableStyles';
 
 import VehicleStatusChip from './VehicleStatusChip';
 
-export default function VehicleTable({ vehicles, onView, onEdit }) {
-  if (!vehicles.length) {
-    return (
-      <Paper variant="outlined" sx={{ p: 3 }}>
-        <Typography variant="body2" color="text.secondary">
-          No vehicle records found.
-        </Typography>
-      </Paper>
-    );
-  }
-
+export default function VehicleTable({ vehicles, page = 0, rowsPerPage = 10, onView, onEdit }) {
   return (
-    <TableContainer component={Paper} variant="outlined">
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Plate number</TableCell>
-            <TableCell>Owner name</TableCell>
-            <TableCell>Vehicle type</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell>Source</TableCell>
-            <TableCell>Notes</TableCell>
-            <TableCell>Created</TableCell>
-            <TableCell>Updated</TableCell>
-            <TableCell align="right">Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {vehicles.map((vehicle) => (
-            <TableRow key={vehicle.id} hover>
-              <TableCell>
-                <Typography variant="subtitle2">{vehicle.plateNumber}</Typography>
+    <Paper sx={standardTablePaperSx} elevation={1}>
+      <TableContainer sx={{ overflowX: 'auto' }}>
+        <Table sx={{ minWidth: 960 }}>
+          <TableHead sx={{ backgroundColor: 'secondary.light' }}>
+            <TableRow>
+              <TableCell sx={standardTableHeadCellSx} align="center">
+                No
               </TableCell>
-              <TableCell>{vehicle.ownerName ?? '—'}</TableCell>
-              <TableCell>{vehicle.vehicleType ?? '—'}</TableCell>
-              <TableCell>
-                <VehicleStatusChip kind="status" value={vehicle.status} />
+              <TableCell sx={standardTableHeadCellSx}>Plate number</TableCell>
+              <TableCell sx={standardTableHeadCellSx}>Owner name</TableCell>
+              <TableCell sx={standardTableHeadCellSx}>Vehicle type</TableCell>
+              <TableCell sx={standardTableHeadCellSx} align="center">
+                Status
               </TableCell>
-              <TableCell>
-                <VehicleStatusChip kind="source" value={vehicle.source} />
+              <TableCell sx={standardTableHeadCellSx} align="center">
+                Source
               </TableCell>
-              <TableCell>{vehicle.notesSummary}</TableCell>
-              <TableCell>{vehicle.formattedCreatedAt}</TableCell>
-              <TableCell>{vehicle.formattedUpdatedAt}</TableCell>
-              <TableCell align="right">
-                <Button size="small" variant="outlined" sx={{ mr: 1 }} onClick={() => onView(vehicle.id)}>
-                  View
-                </Button>
-                <Button size="small" variant="contained" onClick={() => onEdit(vehicle)}>
-                  Edit
-                </Button>
+              <TableCell sx={standardTableHeadCellSx}>Notes</TableCell>
+              <TableCell sx={standardTableHeadCellSx} align="center">
+                Created
+              </TableCell>
+              <TableCell sx={standardTableHeadCellSx} align="center">
+                Updated
+              </TableCell>
+              <TableCell sx={standardTableHeadCellSx} align="center">
+                Action
               </TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+          </TableHead>
+          <TableBody>
+            {!vehicles.length ? (
+              <TableEmptyRow colSpan={10} message="No vehicle records found." />
+            ) : (
+              vehicles.map((vehicle, index) => (
+                <TableRow key={vehicle.id} hover sx={standardTableRowSx}>
+                  <TableCell align="center">{page * rowsPerPage + index + 1}</TableCell>
+                  <TableCell>
+                    <Typography variant="subtitle2">{vehicle.plateNumber}</Typography>
+                  </TableCell>
+                  <TableCell>{vehicle.ownerName ?? '—'}</TableCell>
+                  <TableCell>{vehicle.vehicleType ?? '—'}</TableCell>
+                  <TableCell align="center">
+                    <VehicleStatusChip kind="status" value={vehicle.status} />
+                  </TableCell>
+                  <TableCell align="center">
+                    <VehicleStatusChip kind="source" value={vehicle.source} />
+                  </TableCell>
+                  <TableCell>{vehicle.notesSummary}</TableCell>
+                  <TableCell align="center">{vehicle.formattedCreatedAt}</TableCell>
+                  <TableCell align="center">{vehicle.formattedUpdatedAt}</TableCell>
+                  <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                    <TableActionButtons
+                      onView={() => onView(vehicle.id)}
+                      onEdit={() => onEdit(vehicle)}
+                      viewLabel="View vehicle"
+                      editLabel="Edit vehicle"
+                    />
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Paper>
   );
 }
 
 VehicleTable.propTypes = {
   vehicles: PropTypes.arrayOf(PropTypes.object).isRequired,
+  page: PropTypes.number,
+  rowsPerPage: PropTypes.number,
   onView: PropTypes.func.isRequired,
   onEdit: PropTypes.func.isRequired
 };

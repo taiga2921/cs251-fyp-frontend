@@ -21,11 +21,17 @@ export class UserRepository {
     }
   }
 
+  async getRoles() {
+    try {
+      return await this.dataSource.getRoles();
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+      throw error;
+    }
+  }
+
   async createUser(userData) {
     try {
-      if (!userData.name || !userData.email || !userData.phone || !userData.address || !userData.role) {
-        throw new Error('Name, email, phone number, home address, and role are required');
-      }
       return await this.dataSource.createUser(userData);
     } catch (error) {
       console.error('Error creating user:', error);
@@ -35,9 +41,6 @@ export class UserRepository {
 
   async updateUser(userId, userData) {
     try {
-      if (!userData.name || !userData.email || !userData.phone || !userData.address || !userData.role) {
-        throw new Error('Name, email, phone number, home address, and role are required');
-      }
       return await this.dataSource.updateUser(userId, userData);
     } catch (error) {
       console.error('Error updating user:', error);
@@ -54,6 +57,16 @@ export class UserRepository {
     }
   }
 
+  normalizeUser(payload) {
+    return payload?.data ?? payload ?? null;
+  }
+
+  normalizeRolesList(payload) {
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload)) return payload;
+    return [];
+  }
+
   filterUsers(users, searchText) {
     if (!searchText) return users;
 
@@ -62,8 +75,14 @@ export class UserRepository {
       const name = user.name || '';
       const email = user.email || '';
       const phone = user.phone || '';
+      const roleName = user.role?.name || '';
 
-      return name.toLowerCase().includes(lowerSearch) || email.toLowerCase().includes(lowerSearch) || phone.includes(searchText);
+      return (
+        name.toLowerCase().includes(lowerSearch) ||
+        email.toLowerCase().includes(lowerSearch) ||
+        phone.includes(searchText) ||
+        roleName.toLowerCase().includes(lowerSearch)
+      );
     });
   }
 

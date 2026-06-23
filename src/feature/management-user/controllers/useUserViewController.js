@@ -1,73 +1,62 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-/**
- * useUserViewController
- * ---------------------
- * Controller hook for the User View page.
- */
+import { extractBackendErrorMessage } from '../utils/userValidation';
+
 export const useUserViewController = (repository, userId) => {
-  // Navigation handler from React Router
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  /**
-   * Side effect:
-   * Fetch user data when:
-   * - The component mounts
-   * - The userId changes (route param update)
-   */
-  useEffect(() => {
-    loadUser();
-  }, [userId]);
-
-  /**
-   * Fetch a single user by ID from the repository.
-   */
-  const loadUser = async () => {
+  const loadUser = useCallback(async () => {
     try {
       setLoading(true);
-
-      // Delegate data access to repository (abstraction over API)
-      const userData = await repository.getUserById(userId);
-      // Store result in controller state
-      setUser(userData);
-    } catch (error) {
-      // Log for developers
-      console.error('Failed to load user:', error);
-
-      // Crude but explicit user feedback (can be improved later)
-      alert('Failed to load user data');
+      setError('');
+      const response = await repository.getUserById(userId);
+      setUser(repository.normalizeUser(response));
+    } catch (err) {
+      console.error('Failed to load user:', err);
+      setError(extractBackendErrorMessage(err, 'Failed to load user data.'));
+      setUser(null);
     } finally {
-      // Always stop loading, success or failure
       setLoading(false);
     }
-  };
+  }, [repository, userId]);
 
-  /**
-   * Navigate back to the user management list
-   */
+  useEffect(() => {
+    void loadUser();
+  }, [loadUser]);
+
   const handleBack = () => {
     navigate('/admin/management-user');
   };
 
-  /**
-   * Navigate to edit page for the current user
-   */
   const handleEdit = () => {
     navigate(`/admin/management-user/edit/${userId}`);
   };
 
-  /**
-   * Public API exposed to the View
-   * Only what the UI needs—nothing more
-   */
+  const handleDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete this user?')) {
+      return;
+    }
+
+    try {
+      await repository.deleteUser(userId);
+      navigate('/admin/management-user');
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+      alert(extractBackendErrorMessage(err, 'Failed to delete user.'));
+    }
+  };
+
   return {
     user,
     loading,
+    error,
     handleBack,
-    handleEdit
+    handleEdit,
+    handleDelete
   };
 };

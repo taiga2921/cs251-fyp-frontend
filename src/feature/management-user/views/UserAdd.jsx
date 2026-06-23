@@ -1,4 +1,5 @@
-import { Box, Grid, Fade } from '@mui/material';
+import { useMemo } from 'react';
+import { Alert, Box, CircularProgress, Grid } from '@mui/material';
 import { IconUsers as UsersIcon } from '@tabler/icons-react';
 
 import DetailCard from 'ui-component/cards/DetailCard';
@@ -12,103 +13,74 @@ import { UserRepository } from '../repositories/userRepository';
 import userService from '../datasources/userService';
 import { useUserAddController } from '../controllers/useUserAddController';
 
-const ROLE_OPTIONS = [
-  { value: 'admin', label: 'Administrator', icon: '👨‍💼' },
-  { value: 'operator', label: 'Operator', icon: '⚙️' },
-  { value: 'guard', label: 'Guard', icon: '🛡️' }
-];
-
 export default function UserAdd() {
-  const repository = new UserRepository(userService);
+  const repository = useMemo(() => new UserRepository(userService), []);
   const controller = useUserAddController(repository);
+
+  if (controller.rolesLoading) {
+    return (
+      <DetailCard title="Add new User" avatar={<UsersIcon size={24} />} onBack={controller.handleCancel}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress />
+        </Box>
+      </DetailCard>
+    );
+  }
 
   return (
     <>
       <DetailCard title="Add new User" avatar={<UsersIcon size={24} />} onBack={controller.handleCancel}>
         <Box sx={{ mx: 'auto' }} component="form" onSubmit={controller.handleSubmit}>
-          {/* Profile Picture Section */}
-          {/* <UserAddProfile controller={controller} /> */}
+          {controller.submitError ? (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {controller.submitError}
+            </Alert>
+          ) : null}
 
           <Grid container spacing={3}>
-            {/* Personal Information */}
             <Grid size={{ xs: 12, md: 6 }}>
-              <Fade in timeout={1000}>
-                <Box>
-                  <SectionHeader title="Personal Information"></SectionHeader>
-                </Box>
-              </Fade>
-
-              <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 12 }}>
-                  <Box>
-                    <FieldContainer
-                      label="Full Name"
-                      name="full_name"
-                      value={controller.formData.full_name}
-                      onChange={controller.handleChange('full_name')}
-                      error={!!controller.errors.full_name}
-                      helperText={controller.errors.full_name}
-                      placeholder="Enter full name"
-                    ></FieldContainer>
-                  </Box>
-                </Grid>
-
-                <Grid size={{ xs: 12, md: 12 }}>
-                  <Box>
-                    <FieldContainer
-                      label="Username"
-                      name="username"
-                      value={controller.formData.username}
-                      onChange={controller.handleChange('username')}
-                      error={!!controller.errors.username}
-                      helperText={controller.errors.username}
-                      placeholder="Enter username"
-                    ></FieldContainer>
-                  </Box>
-                </Grid>
-              </Grid>
+              <SectionHeader title="Personal Information" />
+              <FieldContainer
+                label="Full Name"
+                name="name"
+                value={controller.formData.name}
+                onChange={controller.handleChange('name')}
+                error={!!controller.errors.name}
+                helperText={controller.errors.name}
+                placeholder="Enter full name"
+                required
+              />
             </Grid>
 
-            {/* Role & Permissions */}
             <Grid size={{ xs: 12, md: 6 }}>
-              <Box>
-                <SectionHeader title="Role & Permissions"></SectionHeader>
-
-                <SelectFieldContainer
-                  label="User Role"
-                  name="role"
-                  value={controller.formData.role}
-                  onChange={controller.handleChange('role')}
-                  error={!!controller.errors.role}
-                  helperText={controller.errors.role || 'Select the appropriate role'}
-                  options={ROLE_OPTIONS}
-                  placeholder="Select a role"
-                />
-              </Box>
+              <SectionHeader title="Role & Permissions" />
+              <SelectFieldContainer
+                label="User Role"
+                name="role_id"
+                value={controller.formData.role_id}
+                onChange={controller.handleChange('role_id')}
+                error={!!controller.errors.role_id}
+                helperText={controller.errors.role_id || 'Select the appropriate role'}
+                options={controller.roleOptions}
+                placeholder="Select a role"
+              />
             </Grid>
 
-            {/* Contact Details */}
-            <Grid size={{ xs: 12, md: 12 }}>
-              <Fade in timeout={1000}>
-                <Box>
-                  <SectionHeader title="Contact Details"></SectionHeader>
-                </Box>
-              </Fade>
-
+            <Grid size={{ xs: 12 }}>
+              <SectionHeader title="Contact Details" />
               <Grid container spacing={3}>
                 <Grid size={{ xs: 12, md: 6 }}>
-                  <Box>
-                    <FieldContainer
-                      label="Phone Number"
-                      name="phone_number"
-                      value={controller.formData.phone_number}
-                      onChange={controller.handleChange('phone_number')}
-                      error={!!controller.errors.phone_number}
-                      helperText={controller.errors.phone_number}
-                      placeholder="60 1X-XXX XXXX"
-                    ></FieldContainer>
-
-                    <br />
+                  <FieldContainer
+                    label="Phone Number"
+                    name="phone"
+                    value={controller.formData.phone}
+                    onChange={controller.handleChange('phone')}
+                    error={!!controller.errors.phone}
+                    helperText={controller.errors.phone}
+                    placeholder="60123456789"
+                    notRequired
+                  />
+                  <Box sx={{ mt: 2 }}>
                     <FieldContainer
                       label="Email Address"
                       name="email"
@@ -118,7 +90,8 @@ export default function UserAdd() {
                       error={!!controller.errors.email}
                       helperText={controller.errors.email}
                       placeholder="user@example.com"
-                    ></FieldContainer>
+                      required
+                    />
                   </Box>
                 </Grid>
 
@@ -134,39 +107,35 @@ export default function UserAdd() {
                     minRows={3}
                     maxRows={10}
                     placeholder="Enter complete home address"
-                  ></FieldContainer>
+                    notRequired
+                  />
                 </Grid>
               </Grid>
             </Grid>
 
-            {/* Password */}
             <Grid size={{ xs: 12, md: 6 }}>
-              <Box>
-                <SectionHeader title="Security"></SectionHeader>
-
-                <FieldContainer
-                  type="password"
-                  label="Password"
-                  name="password"
-                  value={controller.formData.password}
-                  onChange={controller.handleChange('password')}
-                  error={!!controller.errors.password}
-                  helperText={controller.errors.password}
-                  placeholder="Enter user's password"
-                ></FieldContainer>
-              </Box>
+              <SectionHeader title="Security" />
+              <FieldContainer
+                type="password"
+                label="Password"
+                name="password"
+                value={controller.formData.password}
+                onChange={controller.handleChange('password')}
+                error={!!controller.errors.password}
+                helperText={controller.errors.password}
+                placeholder="Enter user's password"
+                required
+              />
             </Grid>
 
-            {/* Action Buttons */}
-            <Grid size={{ xs: 12, md: 12 }}>
-              <SubmitButton text1="Create User" text2="Creating..." controller={controller}></SubmitButton>
+            <Grid size={{ xs: 12 }}>
+              <SubmitButton text1="Create User" text2="Creating..." controller={controller} />
             </Grid>
           </Grid>
         </Box>
       </DetailCard>
 
-      {/* Success Dialog */}
-      <SuccessDialog controller={controller} msg="User created successfully! Redirecting to user view page..."></SuccessDialog>
+      <SuccessDialog controller={controller} msg="User created successfully! Redirecting to user details..." />
     </>
   );
 }

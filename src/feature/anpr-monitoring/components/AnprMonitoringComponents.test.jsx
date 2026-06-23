@@ -3,6 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { renderWithProviders } from 'test/testUtils';
+import LiveIndicator from 'ui-component/LiveIndicator';
 import AnprLiveIndicator from './AnprLiveIndicator';
 import AnprEventTable from './AnprEventTable';
 import AnprEventSummaryCards from './AnprEventSummaryCards';
@@ -14,18 +15,26 @@ vi.mock('utils/auth', () => ({
   getAuthToken: vi.fn(() => 'token')
 }));
 
-describe('AnprLiveIndicator', () => {
-  it('renders LIVE with Live update tooltip', async () => {
+describe('LiveIndicator', () => {
+  it('renders live status with tooltip', async () => {
     const user = userEvent.setup();
-    renderWithProviders(<AnprLiveIndicator status="live" />);
-    expect(screen.getByText('LIVE')).toBeInTheDocument();
-    await user.hover(screen.getByText('LIVE'));
+    renderWithProviders(<LiveIndicator status="live" />);
+    const indicator = screen.getByRole('status', { name: /live update/i });
+    expect(indicator).toBeInTheDocument();
+    await user.hover(indicator);
     expect(await screen.findByText(/Live update/i)).toBeInTheDocument();
   });
 
-  it('renders RECONNECTING state', () => {
+  it('does not render LIVE text label', () => {
+    renderWithProviders(<LiveIndicator status="live" />);
+    expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
+  });
+});
+
+describe('AnprLiveIndicator', () => {
+  it('re-exports LiveIndicator', () => {
     renderWithProviders(<AnprLiveIndicator status="reconnecting" />);
-    expect(screen.getByText('RECONNECTING')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: /last refresh failed/i })).toBeInTheDocument();
   });
 });
 
@@ -51,7 +60,7 @@ describe('AnprEventTable', () => {
 
     expect(screen.getByText('ABC1234')).toBeInTheDocument();
     expect(screen.getByText('2 images')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /view details/i }));
+    await user.click(screen.getByRole('button', { name: /^view$/i }));
     expect(onViewDetails).toHaveBeenCalledWith('evt-1');
   });
 });

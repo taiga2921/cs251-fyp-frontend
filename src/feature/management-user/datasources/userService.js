@@ -44,6 +44,16 @@ const userService = {
     }
   },
 
+  // Get all roles
+  getRoles: async () => {
+    try {
+      const response = await api.get('/roles');
+      return extractResponsePayload(response);
+    } catch (error) {
+      throw buildServiceError(error, 'fetch roles');
+    }
+  },
+
   // Create user
   createUser: async (userData) => {
     try {

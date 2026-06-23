@@ -16,6 +16,7 @@ import { useTheme, useMediaQuery } from '@mui/material';
 import { IconRefresh } from '@tabler/icons-react';
 
 import MainCard from 'ui-component/cards/MainCard';
+import LiveIndicator from 'ui-component/LiveIndicator';
 import { PaginationFooter } from 'ui-component/table/PaginationFooter';
 
 import anprMonitoringService from '../datasources/anprMonitoringService';
@@ -23,9 +24,8 @@ import { AnprMonitoringRepository } from '../repositories/AnprMonitoringReposito
 import { useAnprMonitoringController } from '../controllers/useAnprMonitoringController';
 import AnprEventTable from '../components/AnprEventTable';
 import AnprEmptyState from '../components/AnprEmptyState';
-import AnprLiveIndicator from '../components/AnprLiveIndicator';
 
-function AnprMonitoringTitle() {
+function AnprMonitoringTitle({ liveStatus }) {
   return (
     <Box
       sx={{
@@ -38,6 +38,7 @@ function AnprMonitoringTitle() {
       <Typography component="span" variant="h3">
         ANPR Monitoring
       </Typography>
+      <LiveIndicator status={liveStatus} />
     </Box>
   );
 }
@@ -54,7 +55,7 @@ export default function AnprEventList() {
 
   if (controller.loading && controller.events.length === 0) {
     return (
-      <MainCard title={<AnprMonitoringTitle />}>
+      <MainCard title={<AnprMonitoringTitle liveStatus={controller.liveStatus} />}>
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress />
         </Box>
@@ -62,18 +63,9 @@ export default function AnprEventList() {
     );
   }
 
-  const titleWithLive = (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5 }}>
-      <Typography component="span" variant="h3">
-        ANPR Monitoring
-      </Typography>
-      <AnprLiveIndicator status={controller.liveStatus} lastUpdatedAt={controller.lastUpdatedAt} />
-    </Box>
-  );
-
   return (
     <MainCard
-      title={titleWithLive}
+      title={<AnprMonitoringTitle liveStatus={controller.liveStatus} />}
       secondary={
         <Button
           variant="outlined"
@@ -86,23 +78,6 @@ export default function AnprEventList() {
       }
     >
       <Stack spacing={2}>
-        <Typography variant="body2" color="text.secondary">
-          Review ANPR detections delivered from the AI runtime through the Laravel backend, including plate reads, camera context, and
-          evidence metadata.
-        </Typography>
-
-        {controller.lastUpdatedAt ? (
-          <Typography variant="caption" color="text.secondary">
-            Last updated:{' '}
-            {new Intl.DateTimeFormat('en-MY', {
-              timeZone: 'Asia/Kuala_Lumpur',
-              dateStyle: 'medium',
-              timeStyle: 'medium'
-            }).format(controller.lastUpdatedAt)}
-            {controller.liveStatus === 'reconnecting' ? ' · Live refresh failed, retrying…' : null}
-          </Typography>
-        ) : null}
-
         {controller.liveError && controller.liveStatus === 'reconnecting' ? (
           <Alert severity="warning" sx={{ py: 0.5 }}>
             {controller.liveError}
@@ -158,6 +133,8 @@ export default function AnprEventList() {
           <AnprEventTable
             events={controller.events}
             highlightedEventIds={controller.highlightedEventIds}
+            page={controller.page}
+            rowsPerPage={controller.rowsPerPage}
             onViewDetails={controller.handleViewDetails}
           />
         )}

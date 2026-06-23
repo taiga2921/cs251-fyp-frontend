@@ -35,13 +35,13 @@ The frontend currently provides:
 - A **JWT-protected dashboard layout** (header, sidebar, breadcrumbs, footer, theme customization).
 - A **login flow** that calls the Laravel backend (`POST /login`, with fallback to `POST /auth/login`) and stores `access_token` in `localStorage`.
 - A **route-guarded** structure that separates protected app routes (`MainRoutes`) from guest-only routes (`AuthenticationRoutes`).
-- A **User Management module** under `feature/management-user` that lists, views, creates, updates, and deletes users via the backend `/users` endpoints. (Add/Edit pages exist but their routes are commented out — see [Section 13](#13-known-issues--technical-debt).)
+- A **User Management module** under `feature/management-user` that lists, views, creates, updates, and deletes users via the backend `/users` and `/roles` endpoints at `/admin/management-user`.
 - Sample dashboard widgets (charts, cards) inherited from the Berry template.
 - Theme customization (light scheme + CSS variables) with font family / border radius adjustments persisted to `localStorage`.
 - **Progressive Web App (PWA)** support via `vite-plugin-pwa` (service worker precache, web app manifest, optional **Install App** UI in the sidebar when the browser fires `beforeinstallprompt`).
 - **PWA client layer (`src/pwa/`)** — offline-aware UX (`NetworkSnackbar`), Dexie **IndexedDB** for patrol location logs and a **sync queue**, a **`flushSyncQueue`** sync engine posting to `POST /api/pwa/sync`, **Background Sync** (tag **`pwa-sync-queue`**: SW notifies clients → app-thread flush; falls back to **`online`** + **Retry Sync** when unsupported), **`pushNotificationService`** (subscribe/unsubscribe → `POST/DELETE /api/push-subscriptions`; **outbound** test → `POST /api/push-notifications/test`), and shared **`useNetworkStatus`**. Custom SW: **`public/push-handlers.js`** (push display + **`notificationclick`** deep links + Background **`sync`**).
 - **Patrol module (`feature/patrol`)** — single guard page **`views/PartrolHome.jsx`** + **`usePatrolController`**: creates Laravel **`patrol_sessions`** and **`checkpoint-events`** placeholders, posts GPS breadcrumbs to **`POST /patrol-routes`**, and drives live GPS only via **`feature/patrol/services/geolocationService`** ( **`saveLocationLog`** → Dexie + **`sync_queue`**). **Stop Patrol** runs: flush PWA sync → **`POST /patrol-sessions/{id}/validate`** (when online) → **`GET /patrol-sessions/{id}/summary`**; results in **`PatrolSummaryCard.jsx`** (backend validation section + final summary). Live geofence PATCH confidence (80/65) remains **provisional** until backend validation. **`components/PatrolTracking.jsx`** is presentational; **`PatrolPwaStatusPanel.jsx`** shows sync/GPS telemetry and sync-queue warnings. Raw **`navigator.geolocation`** is not used from the controller.
-- **ANPR Monitoring (`feature/anpr-monitoring`)** — **M10** admin/operator module at **`/admin/anpr-monitoring`**: lists ANPR detections from Laravel with server-side filters (plate, validity, flagged), shows event detail with summary cards and evidence gallery; evidence previews load via backend `url` / `image_url` and JWT-authenticated fetch to **`GET /anpr-images/{id}/file`**; no event logs or raw metadata in the UI. **M12:** live polling auto-refreshes the list every 5 seconds with a blinking red LIVE indicator beside the table title (tooltip: **Live update**); new rows are temporarily highlighted; polling failures show degraded RECONNECTING state without clearing existing rows; manual refresh remains available.
+- **ANPR Monitoring (`feature/anpr-monitoring`)** — **M10** admin/operator module at **`/admin/anpr-monitoring`**: lists ANPR detections from Laravel with server-side filters (plate, validity, flagged), shows event detail with summary cards and evidence gallery; evidence previews load via backend `url` / `image_url` and JWT-authenticated fetch to **`GET /anpr-images/{id}/file`**; no event logs or raw metadata in the UI. **M12:** live polling auto-refreshes the list every 5 seconds with a blinking red dot beside the page title (tooltip: **Live update**; no `LIVE` text label or last-updated line); new rows are temporarily highlighted; polling failures show degraded RECONNECTING state without clearing existing rows; manual refresh remains available.
 
 ### Core Functionality
 
@@ -53,13 +53,13 @@ The frontend currently provides:
 | Dashboard                  | Implemented (template)               | Demo charts & cards.                                                                                                                                                                                                                                                                                                                                                                                                               |
 | User Management — list     | Implemented                          | `feature/management-user/views/UserList.jsx`.                                                                                                                                                                                                                                                                                                                                                                                      |
 | User Management — view     | Implemented                          | `feature/management-user/views/UserView.jsx`.                                                                                                                                                                                                                                                                                                                                                                                      |
-| User Management — add/edit | **Code present but routes disabled** | Components import non-existent files (`ui-component/FieldContainer`, `SuccessDialog`, etc.) and routes are commented out in `MainRoutes.jsx`.                                                                                                                                                                                                                                                                                      |
+| User Management — add/edit | **Implemented**                      | `UserAdd.jsx` / `UserEdit.jsx` at `/admin/management-user/add` and `/edit/:userId`; payloads use backend fields (`name`, `email`, `phone`, `address`, `role_id`, optional `password` on edit); roles loaded from `GET /roles`. |
 | Zone management            | **Implemented**                      | `feature/management-zone` — CRUD at `/admin/management-zone`; zone detail at `/admin/management-zone/view/:zoneId` embeds scoped checkpoint list (no zone filter/column) + `ZoneProfileData` (no **Created by** in UI). Default list page size **5**.                                                                                                                                                                                                                                                                                                                    |
 | Checkpoint management      | **Implemented**                      | `feature/management-checkpoint` — full admin CRUD; checkpoint detail **Back** returns to parent zone (`/admin/management-zone/view/:zoneId`); detail header has **Edit** (primary) beside **Back**. Default list page size **5**. **Admin only**.                                                                                                                                                                                                                                                                   |
 | Camera management          | **Partially implemented**            | Menu item exists; dedicated UI not complete.                                                                                                                                                                                                                                                                                                                                                                                       |
 | Patrol Home (`/patrol`)    | **Implemented (functional)**         | `feature/patrol` — **all roles** (Admin, Security Operator, Guard); Laravel **`patrol_sessions.id`** is end-to-end **`patrolId`** (Dexie **`location_logs.patrolId`** and **`POST /pwa/sync`** payload **`patrolId`** match); checkpoints via **`checkpoint-events`**; route crumbs via **`POST /patrol-routes`**; GPS via **`usePatrolController`** + **`services/geolocationService`**; **`PatrolPwaStatusPanel`**. See [Section 15](#15-progressive-web-app-pwa). |
-| Patrol Monitoring          | **Implemented**                      | `feature/patrol-monitoring` — **Admin + Security Operator only**; dashboard + session detail at **`/admin/patrol-monitoring`**; sidebar item under **Operator** group with **`IconMapPin2`**; lists patrol sessions, summaries, checkpoint events, **route map** (Leaflet CDN) with **suspicious segment overlays** (Milestone 10) and **patrol replay** (Milestone 11); **live updates** via Laravel Reverb + Echo (30s polling fallback); **Re-run Validation** calls backend **`POST …/validate`**. |
-| ANPR Monitoring            | **Implemented**                      | `feature/anpr-monitoring` — **Admin + Security Operator only**; list + detail at **`/admin/anpr-monitoring`**; sidebar **ANPR Monitoring** (`IconCar`); server-side filters via **`GET /anpr-events`**; evidence gallery with protected file previews; **M12** live polling (5s) with LIVE indicator, new-row highlight, manual refresh preserved; **M13** linked vehicle section on event detail with admin navigation to vehicle management; **M15** exponential backoff on repeated poll failures (max 30s), list evidence badges use `images_count` when image rows are omitted. |
+| Patrol Monitoring          | **Implemented**                      | `feature/patrol-monitoring` — **Admin + Security Operator only**; dashboard + session detail at **`/admin/patrol-monitoring`**; sidebar item under **Operator** group with **`IconMapPin2`**; lists patrol sessions, summaries, checkpoint events, **route map** (Leaflet CDN) with **suspicious segment overlays** (Milestone 10) and **patrol replay** (Milestone 11); **live updates** via Laravel Reverb + Echo (30s polling fallback) with the same blinking red dot live indicator as ANPR Monitoring; **Re-run Validation** calls backend **`POST …/validate`**. |
+| ANPR Monitoring            | **Implemented**                      | `feature/anpr-monitoring` — **Admin + Security Operator only**; list + detail at **`/admin/anpr-monitoring`**; sidebar **ANPR Monitoring** (`IconCar`); server-side filters via **`GET /anpr-events`**; evidence gallery with protected file previews; **M12** live polling (5s) with blinking red dot indicator (tooltip only), new-row highlight, manual refresh preserved; **M13** linked vehicle section on event detail with admin navigation to vehicle management; **M15** exponential backoff on repeated poll failures (max 30s), list evidence badges use `images_count` when image rows are omitted. |
 | PWA offline / sync         | **Implemented (core)**               | IndexedDB + sync queue + global **`NetworkSnackbar`**; **`POST /api/pwa/sync`** (**JWT**) drains **`location_log`** rows idempotently. **Background Sync** registers tag **`pwa-sync-queue`** when the queue has work; SW **`sync`** posts **`PWA_SYNC_REQUEST`** to clients → **`flushSyncQueue`**. **Retry Sync** + auto-flush on **`online`** remain when Background Sync is unavailable.                                       |
 | Web Push (PWA)             | **Implemented**                      | Subscribe/unsubscribe + **outbound** patrol alerts from Laravel (`WebPushNotificationService`). **`PatrolPwaStatusPanel`**: permission/subscription state, **Send Test Notification** (`POST /push-notifications/test` — `success: true` only when at least one device receives the push; `data` includes delivery counts). Reverb realtime remains separate.                                                                      |
 | Theme Customization        | Implemented                          | Font family + border radius drawer (toggle button itself is currently commented out).                                                                                                                                                                                                                                                                                                                                              |
@@ -454,7 +454,11 @@ Reusable presentational components.
 | `extended/Breadcrumbs.jsx`                                                                          | Auto-generated breadcrumbs from `menu-items` + current path.                                                                                                                                                                                                |
 | `extended/Avatar.jsx`, `extended/AppBar.jsx`, `extended/Accordion.jsx`, `extended/ImageList.jsx`    | Berry MUI extensions.                                                                                                                                                                                                                                       |
 | `extended/Form/CustomFormControl.jsx`, `FormControl.jsx`, `FormControlSelect.jsx`, `InputLabel.jsx` | Styled form controls used by login form / Berry pages.                                                                                                                                                                                                      |
-| `table/PaginationFooter.jsx`                                                                        | Generic “rows per page + page index + MUI Pagination” footer (used by User Management).                                                                                                                                                                     |
+| `table/PaginationFooter.jsx`                                                                        | Generic “rows per page + page index + MUI Pagination” footer (used by management and monitoring lists).                                                                                                                                                   |
+| `table/TableActionButtons.jsx`                                                                      | Shared View / Edit / Delete icon-button group for management tables.                                                                                                                                                                                        |
+| `table/TableEmptyRow.jsx`                                                                           | Centered empty-state row inside a table body.                                                                                                                                                                                                               |
+| `table/tableStyles.js`                                                                              | Shared Paper/header/row sx tokens for standardized tables.                                                                                                                                                                                                  |
+| `LiveIndicator.jsx`                                                                                 | Blinking red dot live status indicator (tooltip only; used by ANPR and Patrol Monitoring).                                                                                                                                                                  |
 | `third-party/SimpleBar.jsx`                                                                         | Wrapper around `simplebar-react` for custom scrollbars. Renders `BrowserView` (SimpleBar) and `MobileView` (plain `Box`) — **the main layout sidebar on small screens does not use this** for the menu scroller; see `layout/MainLayout/Sidebar/index.jsx`. |
 
 ### `src/hooks/`
@@ -711,6 +715,7 @@ Per-feature services wrap `api.*` calls and normalize responses. `userService` a
 | Method                     | HTTP call                            | Notes                                         |
 | -------------------------- | ------------------------------------ | --------------------------------------------- |
 | `getAllUsers()`            | `api.get('/users')`                  | Throws a normalized service error on failure. |
+| `getRoles()`               | `api.get('/roles')`                  | Used by User Add/Edit to populate `role_id` options. |
 | `getUserById(id)`          | `api.get('/users/{id})`              |                                               |
 | `createUser(userData)`     | `api.post('/users', userData)`       |                                               |
 | `updateUser(id, userData)` | `api.patch('/users/{id}', userData)` |                                               |
@@ -1068,7 +1073,9 @@ See [Section 3 → `src/ui-component`](#srcui-component). The most reused are:
 | `DetailCard`             | User detail / add / edit pages.        |
 | `Loadable`               | All lazy-loaded route components.      |
 | `Loader`                 | Layout suspense fallback.              |
-| `PaginationFooter`       | User Management list.                  |
+| `PaginationFooter`       | Management and monitoring list pages.  |
+| `LiveIndicator`          | ANPR Monitoring + Patrol Monitoring titles. |
+| `TableActionButtons`     | User, Zone, Checkpoint, Vehicle, ANPR, Patrol session tables. |
 | `MalaysiaTime`           | User table + user detail (timestamps). |
 | `Transitions`            | Header popovers.                       |
 | `AnimateButton`          | Primary CTA buttons.                   |
@@ -1094,7 +1101,7 @@ See [Section 3 → `src/ui-component`](#srcui-component). The most reused are:
 
 | Type       | Where                                                                                                             |
 | ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| Table      | `feature/management-user/components/user-table/UserTable.jsx` (MUI `<Table>` + `<TableContainer>`).               |
+| Table      | Standardized `Paper` + `TableContainer` + `secondary.light` header row. Reference: `UserTable`, `ZoneTable`, `CheckpointTable`, `VehicleTable`, `AnprEventTable`, `PatrolSessionTable`. Actions via `TableActionButtons`. |
 | Pagination | `ui-component/table/PaginationFooter.jsx` (MUI `Pagination` + rows-per-page `Select`).                            |
 | Charts     | `react-apexcharts` in `views/dashboard/Default/*` (line, bar, area).                                              |
 | Cards      | `MainCard`, `DetailCard`, `SubCard`, `EarningCard`, `TotalIncomeDarkCard`, `TotalIncomeLightCard`, `PopularCard`. |
@@ -1103,14 +1110,14 @@ See [Section 3 → `src/ui-component`](#srcui-component). The most reused are:
 
 - **Alerts** are used only in `routes/ErrorBoundary.jsx` (inline MUI `<Alert>` for HTTP error codes).
 - **Toasts/snackbars**: Unable to determine from current implementation — none are wired.
-- **Modal/Dialog**: User add/edit pages reference a `SuccessDialog` from `ui-component/dialogs/SuccessDialog`, but **that file does not exist** (see [Section 13](#13-known-issues--technical-debt)).
-- For destructive actions (e.g. "Delete user"), the project uses native `window.confirm()` and `window.alert()`.
+- **Modal/Dialog**: `ui-component/dialogs/SuccessDialog` — used after successful User/Zone create or update (auto-redirect after ~2s).
+- For destructive actions (e.g. "Delete user"), the project uses native `window.confirm()` and `window.alert()` on some screens; User Details exposes Delete in the header with confirm dialog.
 
 ### Form Components
 
 - `CustomFormControl` (Berry's styled MUI `<FormControl>`) — used in login/register forms.
 - `OutlinedInput` + `InputLabel` + `FormHelperText` — MUI primitives.
-- Feature views (UserAdd / UserEdit) reference `FieldContainer`, `SelectFieldContainer`, `SectionHeader`, and `SubmitButton` from `ui-component/...`, which are **not present in the codebase**. See [Section 13](#13-known-issues--technical-debt).
+- Feature views (UserAdd / UserEdit / ZoneAdd / ZoneEdit) use `FieldContainer`, `SelectFieldContainer`, `SectionHeader`, and `SubmitButton` from `ui-component/`.
 
 ### Styling Approach
 
@@ -1197,11 +1204,11 @@ validate()
           └── userService.createUser / updateUser
                 └── api.post / api.patch
         → on success: setShowSuccessModal(true)
-              → useEffect 2s timer → handleModalClose() → navigate(`/admin/userManagement/view/${id}`)
-        → on failure: alert('Failed to ...')
+              → useEffect 2s timer → handleModalClose() → navigate(`/admin/management-user/view/${id}`)
+        → on failure: set `submitError` and field-level `errors` from Laravel validation when available
 ```
 
-> The success-flow `navigate()` calls hard-code the path `/admin/userManagement/...`, which **does not match** the registered route prefix `/admin/management-user/...`. This is an existing bug — see [Section 13](#13-known-issues--technical-debt).
+User payloads are built in `feature/management-user/utils/userValidation.js` (`name`, `email`, `phone`, `address`, `role_id`, optional `password` on edit).
 
 ### Client-Side Validation
 
@@ -1497,40 +1504,17 @@ dist/
 
 The following items were verified against the current source tree and represent real gaps or bugs.
 
-### Broken / Disabled User Add & Edit Flow
+### ~~Broken / Disabled User Add & Edit Flow~~ (resolved)
 
-- `MainRoutes.jsx` has the `add` and `edit/:userId` routes **commented out**, so `UserAdd` and `UserEdit` cannot be reached via the UI today.
-- Both `UserAdd.jsx` and `UserEdit.jsx` import components that **do not exist** in the codebase:
-  - `ui-component/FieldContainer`
-  - `ui-component/CreateActionButtons` (for `SubmitButton`)
-  - `ui-component/dialogs/SuccessDialog`
-  - `ui-component/SelectFieldContainer`
-  - `ui-component/SectionHeader`
-- Even if the routes were re-enabled, the page would fail to compile until those components are added (or removed from the imports).
+User Add/Edit routes are active at `/admin/management-user/add` and `/admin/management-user/edit/:userId`. Controllers now map form fields to the Laravel contract (`name`, `email`, `phone`, `address`, `role_id`, `password`) and load role options from `GET /roles`. Navigation uses `/admin/management-user/...` consistently.
 
-### Hard-Coded Wrong Navigation Paths in User Controllers
+### ~~Hard-Coded Wrong Navigation Paths in User Controllers~~ (resolved)
 
-In `useUserAddController.js` and `useUserFormController.js`, the cancel/success navigation calls go to `/admin/userManagement/...`, but the registered route prefix is `/admin/management-user/...`:
+Cancel/success navigation in `useUserAddController` and `useUserFormController` now targets `/admin/management-user/...`.
 
-```189:191:src/feature/management-user/controllers/useUserAddController.js
-const handleCancel = () => {
-   navigate('/admin/userManagement');
-};
-```
+### ~~Repository-Side Validation Field Mismatch~~ (resolved)
 
-This will produce a 404-equivalent (no matching route) until the paths are aligned.
-
-### Repository-Side Validation Field Mismatch
-
-`UserRepository.createUser` and `updateUser` validate against `userData.name`, `userData.phone`, etc., but the controllers populate `full_name` and `phone_number`:
-
-```26:28:src/feature/management-user/repositories/userRepository.js
-if (!userData.name || !userData.email || !userData.phone || !userData.address || !userData.role) {
-  throw new Error('Name, email, phone number, home address, and role are required');
-}
-```
-
-So every create/update call would throw "...are required" before reaching the data source. (Currently moot because the UI flow is disabled.)
+`UserRepository` no longer blocks requests with stale `full_name` / `phone_number` checks. Payload building and validation live in `utils/userValidation.js`.
 
 ### `userDataSource.js` Mock Is Unused
 
@@ -1604,7 +1588,7 @@ Suggestions that are actionable given the current implementation.
 
 ### Feature Enhancements
 
-- **Complete the User Management module**: implement `UserAdd` / `UserEdit` properly by adding the missing `ui-component/FieldContainer`, `SelectFieldContainer`, `SectionHeader`, `CreateActionButtons` (`SubmitButton`), and `dialogs/SuccessDialog` components, then re-enable the commented-out routes in `MainRoutes.jsx`.
+- ~~**Complete the User Management module**~~ — done: add/edit forms aligned with Laravel `StoreUserRequest` / `UpdateUserRequest`; roles from `GET /roles`; improved User Details page.
 - ~~**Implement logout**~~ — done (Milestone 7): Profile menu → `useAuthController.handleLogout()` → `POST /auth/logout`, `clearAuthSession()`, Reverb disconnect, `/login`.
 - **Implement Register**: convert `AuthRegister.jsx` from a static form into a controlled form that calls the backend register endpoint.
 - ~~**Implement Checkpoint module**~~ — done (Milestone 8): `feature/management-checkpoint` with map picker and full CRUD.
@@ -1816,7 +1800,7 @@ Geofence **auto-completion** for checkpoints: the controller computes distances 
 
 | File                                              | Role                                                                                                                                      |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `views/PatrolMonitoringDashboard.jsx`             | Stats cards, filters, session table, pagination                                                                                           |
+| `views/PatrolMonitoringDashboard.jsx`             | Stats cards, filters, session table, pagination, shared `LiveIndicator` in title                          |
 | `views/PatrolSessionDetail.jsx`                   | Session info, summary, **patrol route map**, **replay controls**, checkpoint events, **Re-run Validation**                                |
 | `controllers/usePatrolMonitoringController.js`    | List loading, filters, summary prefetch for completed rows                                                                                |
 | `controllers/usePatrolSessionDetailController.js` | Detail load; validation + reload summary/events/**routes**; stores `anomalies`, `selectedAnomaly`, `showAnomalies` from validation result |
@@ -1880,13 +1864,13 @@ Each overlay has a Leaflet popup: type, severity, message, time range, distance/
 
 | File                                           | Role                                                                                                      |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `views/AnprEventList.jsx`                      | List page: filters, table, pagination, refresh, LIVE indicator, last updated line                         |
+| `views/AnprEventList.jsx`                      | List page: filters, table, pagination, refresh, blinking red dot live indicator (tooltip only)            |
 | `views/AnprEventDetail.jsx`                    | Detail page: status chips, summary cards, evidence gallery, back/refresh                                  |
 | `controllers/useAnprMonitoringController.js`   | `useAnprMonitoringController` (list + M12 live polling) + `useAnprEventDetailController` (detail)         |
 | `repositories/AnprMonitoringRepository.js`     | Normalize events/images; build backend filter query params (`sort`, `direction`); unwrap Laravel paginator |
 | `datasources/anprMonitoringService.js`         | Laravel API adapter (`/anpr-events`, `/anpr-images`)                                                     |
 | `components/AnprEventTable.jsx`                | Detection table with new-row highlighting                                                               |
-| `components/AnprLiveIndicator.jsx`             | Blinking red LIVE / RECONNECTING indicator (tooltip: **Live update**)                                   |
+| `components/AnprLiveIndicator.jsx`             | Re-export of shared `ui-component/LiveIndicator`                                                          |
 | `components/AnprEventSummaryCards.jsx`         | Plate, confidence, camera, vehicle, coordinates                                                         |
 | `components/AnprEvidenceGallery.jsx`           | Ordered full/plate/annotated cards; JWT blob fetch for protected file URLs                                |
 | `components/AnprStatusChip.jsx`                | Validity, flagged, evidence chips                                                                         |
@@ -1894,7 +1878,7 @@ Each overlay has a Leaflet popup: type, severity, message, time range, distance/
 
 **List:** `GET /anpr-events` with server pagination and filters (`plate_number`, `is_valid`, `is_flagged`, `sort=detection_time`, `direction=desc`). **M12:** auto-refreshes every 5 seconds while the page is open; manual **Refresh** reloads the current page; new detections are highlighted for ~4 seconds. **M15:** repeated poll failures use exponential backoff (5s base, 30s cap); successful poll resets live status; list rows use `images_count` for evidence badges when full image arrays are not returned.
 
-**Live indicator:** Red blinking dot + `LIVE` chip beside the **ANPR Monitoring** title. Tooltip: **Live update**. On polling failure, shows `RECONNECTING` without clearing existing rows; backoff reduces request spam until the backend recovers.
+**Live indicator:** Blinking red dot beside the page title (shared `ui-component/LiveIndicator`). Tooltip: **Live update** (or reconnecting/paused tooltips). No `LIVE` text label or last-updated timestamp in the header or body. On polling failure, shows `RECONNECTING` without clearing existing rows; backoff reduces request spam until the backend recovers. Patrol Monitoring uses the same indicator component and visual style.
 
 **Detail:** `GET /anpr-events/{id}` first; `GET /anpr-images?anpr_event_id=…` only when images are missing from the detail payload. Displays summary + evidence only — **no** event logs and **no** raw metadata panel.
 

@@ -15,8 +15,10 @@ import {
   Typography
 } from '@mui/material';
 import { useTheme, useMediaQuery } from '@mui/material';
+import { IconRefresh } from '@tabler/icons-react';
 
 import MainCard from 'ui-component/cards/MainCard';
+import LiveIndicator from 'ui-component/LiveIndicator';
 import { PaginationFooter } from 'ui-component/table/PaginationFooter';
 
 import patrolMonitoringService from '../datasources/patrolMonitoringService';
@@ -38,6 +40,17 @@ function StatCard({ label, value }) {
   );
 }
 
+function PatrolMonitoringTitle({ liveStatus }) {
+  return (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5 }}>
+      <Typography component="span" variant="h3">
+        Patrol Monitoring
+      </Typography>
+      <LiveIndicator status={liveStatus} />
+    </Box>
+  );
+}
+
 export default function PatrolMonitoringDashboard() {
   const repositoryRef = useRef(null);
   if (!repositoryRef.current) {
@@ -50,7 +63,7 @@ export default function PatrolMonitoringDashboard() {
 
   if (controller.loading && controller.sessions.length === 0) {
     return (
-      <MainCard title="Patrol Monitoring">
+      <MainCard title={<PatrolMonitoringTitle liveStatus={controller.liveStatus} />}>
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress />
         </Box>
@@ -58,19 +71,17 @@ export default function PatrolMonitoringDashboard() {
     );
   }
 
-  const liveLabel = controller.isConnected
-    ? 'Live (WebSocket)'
-    : controller.isRealtimeEnabled
-      ? `Polling fallback (${controller.connectionState})`
-      : 'Polling only (realtime disabled)';
-
   return (
-    <MainCard title="Patrol Monitoring">
+    <MainCard
+      title={<PatrolMonitoringTitle liveStatus={controller.liveStatus} />}
+      secondary={
+        <Button variant="outlined" startIcon={<IconRefresh size={18} />} onClick={controller.handleRefresh}>
+          Refresh
+        </Button>
+      }
+    >
       <PatrolRealtimeSnackbar />
       <Stack spacing={2}>
-        <Typography variant="caption" color="text.secondary">
-          {liveLabel}
-        </Typography>
         <Grid container spacing={2}>
           <Grid size={{ xs: 6, sm: 4, md: 2 }}>
             <StatCard label="Total sessions" value={controller.stats.total} />
@@ -120,9 +131,6 @@ export default function PatrolMonitoringDashboard() {
               ))}
             </Select>
           </FormControl>
-          <Button variant="outlined" onClick={controller.handleRefresh}>
-            Refresh
-          </Button>
         </Stack>
 
         {controller.error ? <Alert severity="error">{controller.error}</Alert> : null}
@@ -136,6 +144,8 @@ export default function PatrolMonitoringDashboard() {
         <PatrolSessionTable
           sessions={controller.sessions}
           summariesBySessionId={controller.summariesBySessionId}
+          page={controller.page}
+          rowsPerPage={controller.rowsPerPage}
           onViewDetails={controller.handleViewDetails}
         />
 

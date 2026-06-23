@@ -40,7 +40,13 @@ export default function VehicleList() {
           sx={{ maxWidth: 320 }}
         />
 
-        <VehicleTable vehicles={controller.vehicles} onView={controller.handleViewVehicle} onEdit={controller.handleOpenEdit} />
+        <VehicleTable
+          vehicles={controller.vehicles}
+          page={controller.page}
+          rowsPerPage={controller.rowsPerPage}
+          onView={controller.handleViewVehicle}
+          onEdit={controller.handleOpenEdit}
+        />
 
         {controller.pagination.total > 0 ? (
           <PaginationFooter

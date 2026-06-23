@@ -1,7 +1,7 @@
-import { Box, IconButton, TableCell, TableRow } from '@mui/material';
-import { IconEye as ViewIcon, IconPencil as EditIcon, IconTrash as DeleteIcon } from '@tabler/icons-react';
+import { TableCell, TableRow } from '@mui/material';
 
 import { MalaysiaTime } from 'ui-component/MalaysiaTime';
+import { TableActionButtons } from 'ui-component/table/TableActionButtons';
 import CheckpointLocationTypeChip from '../CheckpointLocationTypeChip';
 import CheckpointStatusChip from '../CheckpointStatusChip';
 
@@ -23,17 +23,14 @@ export function CheckpointTableRow({ checkpoint, hideZoneColumn = false, onView,
       <TableCell align="center">{checkpoint.longitude}</TableCell>
       <TableCell align="center">{checkpoint.updated_at ? <MalaysiaTime time={checkpoint.updated_at} /> : '—'}</TableCell>
       <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.25 }}>
-          <IconButton color="info" size="small" aria-label="view" title="View" onClick={() => onView(checkpoint.id)}>
-            <ViewIcon size={18} />
-          </IconButton>
-          <IconButton color="warning" size="small" aria-label="edit" title="Edit" onClick={() => onEdit(checkpoint.id)}>
-            <EditIcon size={18} />
-          </IconButton>
-          <IconButton color="error" size="small" aria-label="delete" title="Delete" onClick={() => onDelete(checkpoint.id)}>
-            <DeleteIcon size={18} />
-          </IconButton>
-        </Box>
+        <TableActionButtons
+          onView={() => onView(checkpoint.id)}
+          onEdit={() => onEdit(checkpoint.id)}
+          onDelete={() => onDelete(checkpoint.id)}
+          viewLabel="View checkpoint"
+          editLabel="Edit checkpoint"
+          deleteLabel="Delete checkpoint"
+        />
       </TableCell>
     </TableRow>
   );

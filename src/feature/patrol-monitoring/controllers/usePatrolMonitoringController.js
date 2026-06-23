@@ -210,6 +210,8 @@ export const usePatrolMonitoringController = (repository) => {
     void loadSessions();
   };
 
+  const liveStatus = error ? 'reconnecting' : isConnected || isRealtimeEnabled ? 'live' : 'paused';
+
   return {
     sessions,
     summariesBySessionId,
@@ -232,6 +234,7 @@ export const usePatrolMonitoringController = (repository) => {
     handleRefresh,
     isConnected,
     connectionState,
-    isRealtimeEnabled
+    isRealtimeEnabled,
+    liveStatus
   };
 };

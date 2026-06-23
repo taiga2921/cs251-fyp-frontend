@@ -86,7 +86,7 @@ export function FieldContainer({
           onChange={onChange}
           error={error}
           helperText={helperText}
-          required={required}
+          required={notRequired ? false : required}
           placeholder={placeholder}
           multiline={multiline}
           minRows={minRows}
