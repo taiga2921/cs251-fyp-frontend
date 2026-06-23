@@ -1879,7 +1879,9 @@ Each overlay has a Leaflet popup: type, severity, message, time range, distance/
 
 **Detail:** `GET /anpr-events/{id}` first; `GET /anpr-images?anpr_event_id=…` only when images are missing from the detail payload. Displays summary + evidence only — **no** event logs and **no** raw metadata panel.
 
-**Security:** Does not render `event.raw` or backend lifecycle logs. Camera credentials are omitted from ANPR API responses via `AnprCameraResource` on the backend.
+**Camera panel:** Shows name, location, and active/inactive status only. Does not display IP address, port, RTSP URL, username, or password.
+
+**Security:** Does not render `event.raw` or backend lifecycle logs. Camera credentials and network details are omitted from ANPR API responses via `AnprCameraResource` on the backend.
 
 **Known limitation:** No realtime ANPR feed; manual refresh only.
 

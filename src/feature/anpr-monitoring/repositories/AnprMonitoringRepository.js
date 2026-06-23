@@ -38,11 +38,8 @@ const normalizeCamera = (camera) => {
     id: camera.id ?? null,
     name: camera.name ?? 'Unknown camera',
     location: camera.location ?? null,
-    ipAddress: camera.ip_address ?? null,
-    port: camera.port ?? null,
     isActive: Boolean(camera.is_active),
-    latitude: camera.latitude ?? null,
-    longitude: camera.longitude ?? null
+    lastSeenAt: camera.last_seen_at ?? null
   };
 };
 

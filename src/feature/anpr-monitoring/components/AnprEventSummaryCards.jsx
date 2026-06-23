@@ -59,9 +59,13 @@ export default function AnprEventSummaryCards({ event }) {
                   {event.camera.location}
                 </Typography>
               ) : null}
-              {event.camera.ipAddress ? (
+              {event.camera.isActive === false ? (
                 <Typography variant="caption" color="text.secondary">
-                  IP: {event.camera.ipAddress}
+                  Status: inactive
+                </Typography>
+              ) : event.camera.isActive ? (
+                <Typography variant="caption" color="text.secondary">
+                  Status: active
                 </Typography>
               ) : null}
             </Stack>
