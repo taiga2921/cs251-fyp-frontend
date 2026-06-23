@@ -73,9 +73,7 @@ describe('VehicleEditDrawer', () => {
   it('keeps plate and source read-only and submits allowed fields only', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
-    renderWithProviders(
-      <VehicleEditDrawer open vehicle={vehicle} saving={false} onClose={() => {}} onSave={onSave} />
-    );
+    renderWithProviders(<VehicleEditDrawer open vehicle={vehicle} saving={false} onClose={() => {}} onSave={onSave} />);
 
     const plateField = screen.getByLabelText(/plate number/i);
     const sourceField = screen.getByLabelText(/source/i);

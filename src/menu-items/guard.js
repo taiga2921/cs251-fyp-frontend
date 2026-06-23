@@ -1,5 +1,4 @@
 // assets
-import { HistoryOutlined, LocationOnOutlined, LocalPoliceOutlined, ReportOutlined } from '@mui/icons-material';
 import { IconAlertOctagon, IconCompass, IconHistory, IconShieldChevron } from '@tabler/icons-react';
 
 // icons

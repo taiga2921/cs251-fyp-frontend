@@ -1,16 +1,5 @@
 import { useMemo, useState } from 'react';
-import {
-  Alert,
-  Box,
-  Chip,
-  CircularProgress,
-  Collapse,
-  Grid,
-  IconButton,
-  Paper,
-  Stack,
-  Typography
-} from '@mui/material';
+import { Alert, Box, Chip, CircularProgress, Collapse, Grid, IconButton, Paper, Stack, Typography } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 function formatDurationSeconds(seconds) {
@@ -59,9 +48,7 @@ function countAnomalies(anomalies) {
 
   const segmentAnomalies = anomalies.segment_anomalies ?? [];
   if (Array.isArray(segmentAnomalies)) {
-    count += segmentAnomalies.filter(
-      (row) => row?.major || row?.minor || row?.speed_anomaly || row?.gps_jump
-    ).length;
+    count += segmentAnomalies.filter((row) => row?.major || row?.minor || row?.speed_anomaly || row?.gps_jump).length;
   }
 
   return count;
@@ -109,13 +96,7 @@ function FinalizingProgress({ finalizingStep }) {
   );
 }
 
-function ValidationSection({
-  finalizingStep,
-  validatingPatrol,
-  validationError,
-  validationWarning,
-  validationResult
-}) {
+function ValidationSection({ finalizingStep, validatingPatrol, validationError, validationWarning, validationResult }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const isValidating = validatingPatrol || finalizingStep === 'validating';
@@ -241,14 +222,8 @@ function ValidationSection({
                         </Typography>
                         <Stack direction="row" spacing={0.75} flexWrap="wrap">
                           <Chip label={chip.label} color={chip.color} size="small" />
-                          {row.detection_type ? (
-                            <Chip label={row.detection_type} size="small" variant="outlined" />
-                          ) : null}
-                          <Chip
-                            label={`${row.confidence_score ?? '—'}%`}
-                            size="small"
-                            variant="outlined"
-                          />
+                          {row.detection_type ? <Chip label={row.detection_type} size="small" variant="outlined" /> : null}
+                          <Chip label={`${row.confidence_score ?? '—'}%`} size="small" variant="outlined" />
                         </Stack>
                       </Stack>
                     );

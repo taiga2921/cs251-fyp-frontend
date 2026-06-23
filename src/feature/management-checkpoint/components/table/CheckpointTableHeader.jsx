@@ -5,9 +5,7 @@ export function CheckpointTableHeader({ hideZoneColumn = false }) {
     <TableHead sx={{ backgroundColor: 'secondary.light' }}>
       <TableRow>
         <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }}>Name</TableCell>
-        {!hideZoneColumn ? (
-          <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }}>Zone</TableCell>
-        ) : null}
+        {!hideZoneColumn ? <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }}>Zone</TableCell> : null}
         <TableCell sx={{ color: 'secondary.dark', fontWeight: 600, py: 1.5 }} align="center">
           Type
         </TableCell>

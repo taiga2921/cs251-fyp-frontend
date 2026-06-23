@@ -1,4 +1,4 @@
-import { Alert, Box, Button, FormControlLabel, Grid, Switch, Typography } from '@mui/material';
+import { Alert, Box, FormControlLabel, Grid, Switch, Typography } from '@mui/material';
 
 import { FieldContainer } from 'ui-component/FieldContainer';
 import { SelectFieldContainer } from 'ui-component/SelectFieldContainer';
@@ -22,7 +22,6 @@ export default function CheckpointForm({ controller }) {
     recenterLongitude,
     handleChange,
     handleCoordinatesChange,
-    handleApplyRecommendedRadius,
     handleSubmit
   } = controller;
 
@@ -64,10 +63,7 @@ export default function CheckpointForm({ controller }) {
             value={formData.location_type}
             onChange={handleChange('location_type')}
             error={Boolean(errors.location_type)}
-            helperText={
-              errors.location_type ||
-              `Select Indoor or Outdoor.`
-            }
+            helperText={errors.location_type || `Select Indoor or Outdoor.`}
             options={LOCATION_TYPE_OPTIONS}
             placeholder="Select location type"
             disabled={formDisabled}

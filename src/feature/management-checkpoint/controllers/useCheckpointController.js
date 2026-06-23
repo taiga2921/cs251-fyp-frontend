@@ -47,7 +47,6 @@ export const useCheckpointController = (repository, { zoneId: scopedZoneId = nul
       const normalized = repository.normalizeCheckpointListResponse(payload);
       setCheckpoints(normalized.items);
       setTotalCount(normalized.total);
-
     } catch (err) {
       console.error('Failed to load checkpoints:', err);
       setError(err?.message || 'Failed to load checkpoints.');

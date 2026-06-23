@@ -16,53 +16,53 @@ import { PatrolTable, PatrolTableToolbar } from '../components';
  */
 
 export default function PatrolLiveList() {
-   // Initialize dependencies using dependency injection pattern
-   const repository = new PatrolLiveRepository(patrolLiveDataSource);
-   const controller = usePatrolLiveController(repository);
+  // Initialize dependencies using dependency injection pattern
+  const repository = new PatrolLiveRepository(patrolLiveDataSource);
+  const controller = usePatrolLiveController(repository);
 
-   // Responsive design hooks
-   const theme = useTheme();
-   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  // Responsive design hooks
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-   // Show loading indicator while data is being fetched
-   if (controller.loading) {
-      return (
-         <MainCard title="Patrol Live Tracking">
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-               <CircularProgress />
-            </Box>
-         </MainCard>
-      );
-   }
-
-   return (
+  // Show loading indicator while data is being fetched
+  if (controller.loading) {
+    return (
       <MainCard title="Patrol Live Tracking">
-         {/* Filtering and action toolbar */}
-         <PatrolTableToolbar
-            filterText={controller.filterText}
-            onFilterChange={controller.handleFilterChange}
-            onAddPatrolLive={controller.handleAddPatrolLive}
-         />
-
-         {/* Main table displaying patrolLive data */}
-         <PatrolTable
-            patrols={controller.patrols}
-            isSelected={controller.isSelected}
-            onRowClick={controller.handleRowClick}
-            onView={controller.handleViewPatrolLive}
-            onEdit={controller.handleEditPatrolLive}
-            onDelete={controller.handleDeletePatrolLive}
-         />
-
-         {/* Pagination and rows per page controls */}
-         <PaginationFooter
-            page={controller.page}
-            rowsPerPage={controller.rowsPerPage}
-            filteredCount={controller.filteredCount}
-            onPageChange={controller.handleChangePage}
-            onRowsPerPageChange={controller.handleChangeRowsPerPage}
-            isMobile={isMobile}
-         />
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
       </MainCard>
-   );
+    );
+  }
+
+  return (
+    <MainCard title="Patrol Live Tracking">
+      {/* Filtering and action toolbar */}
+      <PatrolTableToolbar
+        filterText={controller.filterText}
+        onFilterChange={controller.handleFilterChange}
+        onAddPatrolLive={controller.handleAddPatrolLive}
+      />
+
+      {/* Main table displaying patrolLive data */}
+      <PatrolTable
+        patrols={controller.patrols}
+        isSelected={controller.isSelected}
+        onRowClick={controller.handleRowClick}
+        onView={controller.handleViewPatrolLive}
+        onEdit={controller.handleEditPatrolLive}
+        onDelete={controller.handleDeletePatrolLive}
+      />
+
+      {/* Pagination and rows per page controls */}
+      <PaginationFooter
+        page={controller.page}
+        rowsPerPage={controller.rowsPerPage}
+        filteredCount={controller.filteredCount}
+        onPageChange={controller.handleChangePage}
+        onRowsPerPageChange={controller.handleChangeRowsPerPage}
+        isMobile={isMobile}
+      />
+    </MainCard>
+  );
 }

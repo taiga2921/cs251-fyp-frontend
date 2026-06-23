@@ -25,12 +25,7 @@ export default function PatrolRealtimeSnackbar() {
   };
 
   return (
-    <Snackbar
-      open={open}
-      autoHideDuration={AUTO_HIDE_MS}
-      onClose={handleClose}
-      anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-    >
+    <Snackbar open={open} autoHideDuration={AUTO_HIDE_MS} onClose={handleClose} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}>
       <Alert onClose={handleClose} severity={notification?.severity ?? 'info'} variant="filled" sx={{ width: '100%' }}>
         {notification?.message}
       </Alert>

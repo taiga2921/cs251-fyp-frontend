@@ -3,11 +3,7 @@ import PropTypes from 'prop-types';
 import { Alert, Box, CircularProgress, Typography } from '@mui/material';
 
 import MapLegend from './MapLegend';
-import {
-  anomalyToLatLngs,
-  buildAnomalyPopupHtml,
-  getAnomalyMapStyle
-} from '../utils/patrolAnomalyUtils';
+import { anomalyToLatLngs, buildAnomalyPopupHtml, getAnomalyMapStyle } from '../utils/patrolAnomalyUtils';
 
 const GAP_THRESHOLD_SECONDS = 30;
 const LARGE_GAP_SECONDS = 300;
@@ -131,10 +127,7 @@ export default function PatrolRouteMap({
   const initialFitDoneRef = useRef(false);
   const prevRoutesKeyRef = useRef('');
 
-  const highlightedCheckpointSet = useMemo(
-    () => new Set(highlightedCheckpointIds ?? []),
-    [highlightedCheckpointIds]
-  );
+  const highlightedCheckpointSet = useMemo(() => new Set(highlightedCheckpointIds ?? []), [highlightedCheckpointIds]);
 
   const sortedRoutes = useMemo(() => {
     return [...routes].sort((a, b) => {
@@ -464,9 +457,7 @@ export default function PatrolRouteMap({
 
     const guardPt = replayPoint ? routeToLatLng(replayPoint) : traversed[traversed.length - 1];
     if (guardPt) {
-      const timeLabel = replayPoint?.recorded_at
-        ? new Date(replayPoint.recorded_at).toLocaleString()
-        : 'Replay position';
+      const timeLabel = replayPoint?.recorded_at ? new Date(replayPoint.recorded_at).toLocaleString() : 'Replay position';
       replayGuardMarkerRef.current = L.marker(guardPt, {
         icon: createGuardReplayIcon(L),
         zIndexOffset: 1000
@@ -496,11 +487,7 @@ export default function PatrolRouteMap({
 
     const prevKey = prevRoutesKeyRef.current;
     const canIncremental =
-      initialFitDoneRef.current &&
-      prevKey &&
-      routesKey.startsWith(prevKey) &&
-      sortedRoutes.length > 0 &&
-      routesKey !== prevKey;
+      initialFitDoneRef.current && prevKey && routesKey.startsWith(prevKey) && sortedRoutes.length > 0 && routesKey !== prevKey;
 
     if (canIncremental) {
       const prevCount = prevKey.split('|').filter(Boolean).length;
@@ -547,15 +534,7 @@ export default function PatrolRouteMap({
     syncReplayLayers(window.L, mapRef.current);
     syncCheckpointMarkers(window.L, mapRef.current);
     return undefined;
-  }, [
-    replayActive,
-    replayProgressIndex,
-    replayPoint,
-    highlightedCheckpointIds,
-    routePoints,
-    loading,
-    error
-  ]);
+  }, [replayActive, replayProgressIndex, replayPoint, highlightedCheckpointIds, routePoints, loading, error]);
 
   useEffect(() => {
     if (!mapRef.current || !window.L || !selectedAnomaly || replayActive) {

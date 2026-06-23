@@ -1,15 +1,5 @@
 import PropTypes from 'prop-types';
-import {
-  Button,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography
-} from '@mui/material';
+import { Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 
 import { MalaysiaTime } from 'ui-component/MalaysiaTime';
 import AnprStatusChip from './AnprStatusChip';
@@ -66,10 +56,7 @@ export default function AnprEventTable({ events, highlightedEventIds = [], onVie
                 <AnprStatusChip kind="flagged" value={event.isFlagged ? 'flagged' : 'unflagged'} />
               </TableCell>
               <TableCell>
-                <AnprStatusChip
-                  kind="evidence"
-                  value={event.hasEvidence ? 'available' : 'missing'}
-                />
+                <AnprStatusChip kind="evidence" value={event.hasEvidence ? 'available' : 'missing'} />
                 {event.hasEvidence ? (
                   <Typography variant="caption" display="block" color="text.secondary">
                     {event.evidenceCount} image{event.evidenceCount === 1 ? '' : 's'}

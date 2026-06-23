@@ -2,20 +2,10 @@ import PropTypes from 'prop-types';
 import { memo } from 'react';
 
 // material-ui
-import { useTheme } from '@mui/material/styles';
-import Avatar from '@mui/material/Avatar';
 import Card from '@mui/material/Card';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemAvatar from '@mui/material/ListItemAvatar';
-import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import Box from '@mui/material/Box';
-
-// assets
-import TableChartOutlinedIcon from '@mui/icons-material/TableChartOutlined';
 
 // ==============================|| PROGRESS BAR WITH LABEL ||============================== //
 
@@ -57,8 +47,6 @@ function LinearProgressWithLabel({ value, ...others }) {
 // ==============================|| SIDEBAR - MENU CARD ||============================== //
 
 function MenuCard() {
-  const theme = useTheme();
-
   return (
     <Card
       sx={{
@@ -77,8 +65,7 @@ function MenuCard() {
           right: -96
         }
       }}
-    >
-    </Card>
+    ></Card>
   );
 }
 

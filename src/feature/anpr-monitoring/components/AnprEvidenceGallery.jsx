@@ -130,14 +130,7 @@ function EvidencePreview({ previewUrl, alt, onFailed }) {
     return null;
   }
 
-  return (
-    <CardMedia
-      component="img"
-      image={resolvedSrc}
-      alt={alt}
-      sx={{ height: 200, objectFit: 'cover', bgcolor: 'grey.100' }}
-    />
-  );
+  return <CardMedia component="img" image={resolvedSrc} alt={alt} sx={{ height: 200, objectFit: 'cover', bgcolor: 'grey.100' }} />;
 }
 
 EvidencePreview.propTypes = {
@@ -160,11 +153,7 @@ function EvidenceCard({ imageType, image }) {
       {previewFailed ? (
         <UnavailablePreview />
       ) : (
-        <EvidencePreview
-          previewUrl={previewUrl}
-          alt={`${label} evidence`}
-          onFailed={() => setPreviewFailed(true)}
-        />
+        <EvidencePreview previewUrl={previewUrl} alt={`${label} evidence`} onFailed={() => setPreviewFailed(true)} />
       )}
 
       <CardContent>

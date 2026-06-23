@@ -87,8 +87,8 @@ export default function AnprEventList() {
     >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
-          Review ANPR detections delivered from the AI runtime through the Laravel backend, including
-          plate reads, camera context, and evidence metadata.
+          Review ANPR detections delivered from the AI runtime through the Laravel backend, including plate reads, camera context, and
+          evidence metadata.
         </Typography>
 
         {controller.lastUpdatedAt ? (
@@ -109,9 +109,7 @@ export default function AnprEventList() {
           </Alert>
         ) : null}
 
-        {controller.error ? (
-          <Alert severity="error">{controller.error}</Alert>
-        ) : null}
+        {controller.error ? <Alert severity="error">{controller.error}</Alert> : null}
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
           <TextField

@@ -3,8 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 // material-ui
 import { useTheme } from '@mui/material/styles';
 import Avatar from '@mui/material/Avatar';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import ClickAwayListener from '@mui/material/ClickAwayListener';
 import Divider from '@mui/material/Divider';
@@ -17,7 +15,6 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Popper from '@mui/material/Popper';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 
@@ -31,7 +28,7 @@ import { getAuthUserRole } from 'utils/auth';
 
 // assets
 import User1 from 'assets/images/users/user-round.svg';
-import { IconLogout, IconSearch, IconSettings, IconUser } from '@tabler/icons-react';
+import { IconLogout, IconSettings, IconUser } from '@tabler/icons-react';
 
 // ==============================|| PROFILE MENU ||============================== //
 
@@ -210,19 +207,11 @@ export default function ProfileSection() {
                             }
                           />
                         </ListItemButton>
-                        <ListItemButton
-                          sx={{ borderRadius: `${borderRadius}px` }}
-                          onClick={handleLogout}
-                          disabled={logoutLoading}
-                        >
+                        <ListItemButton sx={{ borderRadius: `${borderRadius}px` }} onClick={handleLogout} disabled={logoutLoading}>
                           <ListItemIcon>
                             <IconLogout stroke={1.5} size="20px" />
                           </ListItemIcon>
-                          <ListItemText
-                            primary={
-                              <Typography variant="body2">{logoutLoading ? 'Logging out...' : 'Logout'}</Typography>
-                            }
-                          />
+                          <ListItemText primary={<Typography variant="body2">{logoutLoading ? 'Logging out...' : 'Logout'}</Typography>} />
                         </ListItemButton>
                         {logoutError ? (
                           <Typography variant="caption" color="error" sx={{ display: 'block', px: 2, pb: 1 }}>

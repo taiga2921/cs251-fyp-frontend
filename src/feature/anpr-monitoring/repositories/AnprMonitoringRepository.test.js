@@ -27,11 +27,7 @@ describe('AnprMonitoringRepository', () => {
 
   it('converts filters into backend query params', () => {
     const repo = new AnprMonitoringRepository({});
-    const params = repo.buildListQueryParams(
-      { plateSearch: ' ABC ', validity: 'valid', flagged: 'flagged' },
-      2,
-      25
-    );
+    const params = repo.buildListQueryParams({ plateSearch: ' ABC ', validity: 'valid', flagged: 'flagged' }, 2, 25);
     expect(params).toEqual({
       page: 3,
       per_page: 25,

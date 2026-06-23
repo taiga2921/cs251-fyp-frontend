@@ -1,15 +1,5 @@
 import { useMemo } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Grid,
-  Paper,
-  Snackbar,
-  Stack,
-  Typography
-} from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Grid, Paper, Snackbar, Stack, Typography } from '@mui/material';
 import { IconCar, IconPencil } from '@tabler/icons-react';
 
 import DetailCard from 'ui-component/cards/DetailCard';

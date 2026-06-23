@@ -35,7 +35,11 @@ const sanitizeNumericString = (value) => {
   return output;
 };
 
-const trimFraction = (numeric) => numeric.replace(/(\.\d*?[1-9])0+$/u, '$1').replace(/\.0+$/u, '').replace(/\.$/u, '');
+const trimFraction = (numeric) =>
+  numeric
+    .replace(/(\.\d*?[1-9])0+$/u, '$1')
+    .replace(/\.0+$/u, '')
+    .replace(/\.$/u, '');
 
 const limitCoordinateLength = (value) => {
   if (value.length <= MAX_COORDINATE_LENGTH) return value;
@@ -51,10 +55,7 @@ const limitCoordinateLength = (value) => {
     return `${signPrefix}${integerPart.slice(0, MAX_COORDINATE_LENGTH - signPrefix.length)}`;
   }
 
-  const decimalsAllowed = Math.min(
-    DECIMAL_LIMIT,
-    Math.max(0, MAX_COORDINATE_LENGTH - baseLength - 1)
-  );
+  const decimalsAllowed = Math.min(DECIMAL_LIMIT, Math.max(0, MAX_COORDINATE_LENGTH - baseLength - 1));
 
   if (decimalsAllowed === 0) {
     return `${signPrefix}${integerPart}`;

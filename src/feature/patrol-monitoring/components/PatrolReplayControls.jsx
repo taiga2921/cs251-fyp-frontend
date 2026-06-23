@@ -1,24 +1,9 @@
 import PropTypes from 'prop-types';
-import {
-  Box,
-  Button,
-  Chip,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Slider,
-  Stack,
-  Typography
-} from '@mui/material';
+import { Box, Button, Chip, FormControl, InputLabel, MenuItem, Select, Slider, Stack, Typography } from '@mui/material';
 import { IconPlayerPause, IconPlayerPlay, IconRotateClockwise } from '@tabler/icons-react';
 
 import { MalaysiaTime } from 'ui-component/MalaysiaTime';
-import {
-  formatReplayAnomalyChip,
-  formatReplayCoordinate,
-  REPLAY_SPEED_OPTIONS
-} from '../utils/patrolReplayUtils';
+import { formatReplayAnomalyChip, formatReplayCoordinate, REPLAY_SPEED_OPTIONS } from '../utils/patrolReplayUtils';
 
 export default function PatrolReplayControls({
   replayEnabled = true,
@@ -77,23 +62,12 @@ export default function PatrolReplayControls({
           >
             {isPlaying ? 'Pause' : replayFinished ? 'Replay again' : 'Play'}
           </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<IconRotateClockwise size={18} />}
-            onClick={onStop}
-            disabled={!canReplay}
-          >
+          <Button variant="outlined" size="small" startIcon={<IconRotateClockwise size={18} />} onClick={onStop} disabled={!canReplay}>
             Stop
           </Button>
           <FormControl size="small" sx={{ minWidth: 88 }}>
             <InputLabel id="replay-speed-label">Speed</InputLabel>
-            <Select
-              labelId="replay-speed-label"
-              label="Speed"
-              value={speedMultiplier}
-              onChange={(e) => onSpeedChange?.(e.target.value)}
-            >
+            <Select labelId="replay-speed-label" label="Speed" value={speedMultiplier} onChange={(e) => onSpeedChange?.(e.target.value)}>
               {REPLAY_SPEED_OPTIONS.map((speed) => (
                 <MenuItem key={speed} value={speed}>
                   {speed}x
@@ -101,9 +75,7 @@ export default function PatrolReplayControls({
               ))}
             </Select>
           </FormControl>
-          {replayFinished ? (
-            <Chip size="small" label="Finished" color="success" variant="outlined" />
-          ) : null}
+          {replayFinished ? <Chip size="small" label="Finished" color="success" variant="outlined" /> : null}
         </Stack>
 
         <Box sx={{ px: 0.5 }}>
@@ -126,19 +98,14 @@ export default function PatrolReplayControls({
             Progress: <strong>{Math.round(replayProgress)}%</strong>
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Time:{' '}
-            <strong>
-              {replayTime ? <MalaysiaTime time={replayTime} /> : '—'}
-            </strong>
+            Time: <strong>{replayTime ? <MalaysiaTime time={replayTime} /> : '—'}</strong>
           </Typography>
           <Typography variant="caption" color="text.secondary">
             Position: <strong>{formatReplayCoordinate(currentRoutePoint)}</strong>
           </Typography>
         </Stack>
 
-        {anomalyLabel ? (
-          <Chip size="small" color="warning" label={anomalyLabel} sx={{ alignSelf: 'flex-start' }} />
-        ) : null}
+        {anomalyLabel ? <Chip size="small" color="warning" label={anomalyLabel} sx={{ alignSelf: 'flex-start' }} /> : null}
       </Stack>
     </Box>
   );

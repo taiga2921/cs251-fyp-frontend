@@ -29,15 +29,7 @@ class PwaInstallErrorBoundary extends Component {
   }
 }
 
-function SidebarPwaInstallInner({
-  downMD,
-  drawerOpen,
-  showInstallButton,
-  isInstalled,
-  isStandalone,
-  hasDeferredPrompt,
-  promptInstall
-}) {
+function SidebarPwaInstallInner({ downMD, drawerOpen, showInstallButton, isInstalled, isStandalone, hasDeferredPrompt, promptInstall }) {
   useEffect(() => {
     if (!downMD) return;
     console.info('[PWA][mobile sidebar]', {

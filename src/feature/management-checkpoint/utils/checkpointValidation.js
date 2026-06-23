@@ -36,7 +36,9 @@ export function validateCheckpointForm(formData, { isEdit = false } = {}) {
     errors.radius = `Radius must be between ${RADIUS_MIN} and ${RADIUS_MAX} metres`;
   }
 
-  const rawLocationType = String(formData.location_type ?? '').trim().toLowerCase();
+  const rawLocationType = String(formData.location_type ?? '')
+    .trim()
+    .toLowerCase();
   if (!rawLocationType || !LOCATION_TYPES.includes(rawLocationType)) {
     errors.location_type = 'Location type must be Indoor or Outdoor';
   }

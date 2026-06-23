@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import {
-  computeStepDelayMs,
-  getAnomalyAtReplayTime,
-  getPassedCheckpointIds,
-  sortPatrolRoutes
-} from '../utils/patrolReplayUtils';
+import { computeStepDelayMs, getAnomalyAtReplayTime, getPassedCheckpointIds, sortPatrolRoutes } from '../utils/patrolReplayUtils';
 
 /**
  * Patrol route replay playback (ordered by recorded_at).
@@ -16,12 +11,7 @@ import {
  * @param {Array} [options.checkpointEvents]
  * @param {boolean} [options.replayEnabled] — false for active sessions
  */
-export function usePatrolReplayController({
-  patrolRoutes = [],
-  anomalies = [],
-  checkpointEvents = [],
-  replayEnabled = true
-}) {
+export function usePatrolReplayController({ patrolRoutes = [], anomalies = [], checkpointEvents = [], replayEnabled = true }) {
   const sortedRoutes = useMemo(() => sortPatrolRoutes(patrolRoutes), [patrolRoutes]);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -51,15 +41,9 @@ export function usePatrolReplayController({
     return Number.isFinite(t) ? t : null;
   }, [replayTime]);
 
-  const passedCheckpointIds = useMemo(
-    () => getPassedCheckpointIds(checkpointEvents, replayTimeMs),
-    [checkpointEvents, replayTimeMs]
-  );
+  const passedCheckpointIds = useMemo(() => getPassedCheckpointIds(checkpointEvents, replayTimeMs), [checkpointEvents, replayTimeMs]);
 
-  const currentSegmentAnomaly = useMemo(
-    () => getAnomalyAtReplayTime(anomalies, replayTimeMs),
-    [anomalies, replayTimeMs]
-  );
+  const currentSegmentAnomaly = useMemo(() => getAnomalyAtReplayTime(anomalies, replayTimeMs), [anomalies, replayTimeMs]);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {

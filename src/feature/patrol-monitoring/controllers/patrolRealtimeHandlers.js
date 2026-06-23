@@ -13,7 +13,10 @@ function upsertById(list, item) {
   return next;
 }
 
-export function handleMonitoringRealtimeEvent({ name, payload }, { setSessions, setStats, setSummariesBySessionId, loadStats, loadSessions }) {
+export function handleMonitoringRealtimeEvent(
+  { name, payload },
+  { setSessions, setStats, setSummariesBySessionId, loadStats, loadSessions }
+) {
   switch (name) {
     case 'PatrolSessionStarted': {
       const session = payload?.session;
@@ -84,16 +87,7 @@ export function handleMonitoringRealtimeEvent({ name, payload }, { setSessions, 
 export function handleSessionRealtimeEvent(
   { name, payload },
   patrolSessionId,
-  {
-    setSession,
-    setPatrolRoutes,
-    setCheckpointEvents,
-    setValidationResult,
-    setSummary,
-    loadSummary,
-    loadCheckpointEvents,
-    queueRoutePoint
-  }
+  { setSession, setPatrolRoutes, setCheckpointEvents, setValidationResult, setSummary, loadSummary, loadCheckpointEvents, queueRoutePoint }
 ) {
   if (payload?.patrol_session_id && payload.patrol_session_id !== patrolSessionId) {
     return;

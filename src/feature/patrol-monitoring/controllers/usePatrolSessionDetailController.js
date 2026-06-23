@@ -184,20 +184,16 @@ export const usePatrolSessionDetailController = (repository) => {
 
   const handleRealtimeEvent = useCallback(
     ({ name, payload }) => {
-      handleSessionRealtimeEvent(
-        { name, payload },
-        patrolSessionId,
-        {
-          setSession,
-          setPatrolRoutes,
-          setCheckpointEvents,
-          setValidationResult: applyValidationResult,
-          setSummary,
-          loadSummary: () => loadSummaryRef.current(),
-          loadCheckpointEvents: () => loadCheckpointEventsRef.current(),
-          queueRoutePoint
-        }
-      );
+      handleSessionRealtimeEvent({ name, payload }, patrolSessionId, {
+        setSession,
+        setPatrolRoutes,
+        setCheckpointEvents,
+        setValidationResult: applyValidationResult,
+        setSummary,
+        loadSummary: () => loadSummaryRef.current(),
+        loadCheckpointEvents: () => loadCheckpointEventsRef.current(),
+        queueRoutePoint
+      });
     },
     [patrolSessionId, queueRoutePoint, applyValidationResult]
   );

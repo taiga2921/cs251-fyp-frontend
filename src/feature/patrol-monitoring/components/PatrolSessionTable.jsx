@@ -1,16 +1,5 @@
 import PropTypes from 'prop-types';
-import {
-  Box,
-  Button,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography
-} from '@mui/material';
+import { Box, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { MalaysiaTime } from 'ui-component/MalaysiaTime';
 import PatrolStatusChip from './PatrolStatusChip';
 
@@ -57,15 +46,9 @@ export default function PatrolSessionTable({ sessions, summariesBySessionId = {}
                   <PatrolStatusChip kind="patrol" value={session.status} />
                 </TableCell>
                 <TableCell align="center">
-                  {summary?.confidence_level ? (
-                    <PatrolStatusChip kind="confidence" value={summary.confidence_level} />
-                  ) : (
-                    '—'
-                  )}
+                  {summary?.confidence_level ? <PatrolStatusChip kind="confidence" value={summary.confidence_level} /> : '—'}
                 </TableCell>
-                <TableCell align="center">
-                  {summary?.completion_percentage != null ? `${summary.completion_percentage}%` : '—'}
-                </TableCell>
+                <TableCell align="center">{summary?.completion_percentage != null ? `${summary.completion_percentage}%` : '—'}</TableCell>
                 <TableCell align="right">
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <Button size="small" variant="outlined" onClick={() => onViewDetails(session.id)}>

@@ -77,8 +77,7 @@ export async function saveLocationLog(locationLog) {
   }
 
   const id = crypto.randomUUID();
-  const proposedTimestamp =
-    locationLog.timestamp !== undefined && locationLog.timestamp !== null ? locationLog.timestamp : Date.now();
+  const proposedTimestamp = locationLog.timestamp !== undefined && locationLog.timestamp !== null ? locationLog.timestamp : Date.now();
   const timestamp = await ensureStrictlyIncreasingTimestamp(locationLog.patrolId, proposedTimestamp);
   const source = normalizeSource(locationLog.source);
   const trackingState = normalizeTrackingState(locationLog.trackingState);

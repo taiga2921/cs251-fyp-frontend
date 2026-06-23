@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import dayjs from 'dayjs';
-
 export const useCheckpointAddController = (repository, zoneId) => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -17,7 +15,7 @@ export const useCheckpointAddController = (repository, zoneId) => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewUrl] = useState(null);
   const [newCheckpointId, setNewCheckpointId] = useState(null);
 
   const extractBackendValidationErrors = (error) => {
@@ -78,30 +76,6 @@ export const useCheckpointAddController = (repository, zoneId) => {
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: null }));
     }
-  };
-
-  /* ----------------------------------
-   * Time formatting (HH:mm ONLY)
-   * ---------------------------------- */
-
-  const formatTimeForAPI = (timeValue) => {
-    if (!timeValue) return null;
-
-    if (dayjs.isDayjs(timeValue)) {
-      return timeValue.format('HH:mm');
-    }
-
-    if (timeValue instanceof Date) {
-      const h = timeValue.getHours().toString().padStart(2, '0');
-      const m = timeValue.getMinutes().toString().padStart(2, '0');
-      return `${h}:${m}`;
-    }
-
-    if (typeof timeValue === 'string' && /^\d{2}:\d{2}$/.test(timeValue)) {
-      return timeValue;
-    }
-
-    throw new Error('Unsupported time format');
   };
 
   /* ----------------------------------

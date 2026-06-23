@@ -80,11 +80,7 @@ export default function PatrolSessionDetail() {
           <Button variant="outlined" onClick={controller.handleBack}>
             Back
           </Button>
-          <Button
-            variant="contained"
-            onClick={controller.handleReRunValidation}
-            disabled={controller.validating}
-          >
+          <Button variant="contained" onClick={controller.handleReRunValidation} disabled={controller.validating}>
             {controller.validating ? 'Validating…' : 'Re-run Validation'}
           </Button>
         </Stack>
@@ -152,17 +148,12 @@ export default function PatrolSessionDetail() {
           </Grid>
         </Paper>
 
-        {controller.validationMessage ? (
-          <Alert severity="success">{controller.validationMessage}</Alert>
-        ) : null}
-        {controller.validationError ? (
-          <Alert severity="error">{controller.validationError}</Alert>
-        ) : null}
+        {controller.validationMessage ? <Alert severity="success">{controller.validationMessage}</Alert> : null}
+        {controller.validationError ? <Alert severity="error">{controller.validationError}</Alert> : null}
 
         {controller.validationResult ? (
           <Alert severity="info">
-            Validation: {controller.validationResult.total_segments ?? 0} segments,{' '}
-            {controller.validationResult.total_gaps ?? 0} gaps,{' '}
+            Validation: {controller.validationResult.total_segments ?? 0} segments, {controller.validationResult.total_gaps ?? 0} gaps,{' '}
             {controller.validationResult.checkpoint_results?.length ?? 0} checkpoint results.
           </Alert>
         ) : null}
@@ -262,9 +253,7 @@ export default function PatrolSessionDetail() {
                       <TableRow key={event.id} hover>
                         <TableCell>{event.checkpoint?.name ?? event.checkpoint_id}</TableCell>
                         <TableCell>{event.detection_type ?? '—'}</TableCell>
-                        <TableCell align="center">
-                          {event.confidence_score != null ? `${event.confidence_score}%` : '—'}
-                        </TableCell>
+                        <TableCell align="center">{event.confidence_score != null ? `${event.confidence_score}%` : '—'}</TableCell>
                         <TableCell>
                           <PatrolStatusChip kind="checkpoint" value={event.status} />
                         </TableCell>

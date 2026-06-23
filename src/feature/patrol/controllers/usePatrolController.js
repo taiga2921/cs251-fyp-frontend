@@ -741,9 +741,7 @@ export const usePatrolController = (repository) => {
       db.sync_queue.where('status').equals(SYNC_QUEUE_STATUS_FAILED).toArray()
     ]);
 
-    const validationFailedCount = failedRows.filter(
-      (row) => row.resultStatus === SYNC_RESULT_STATUS_VALIDATION_FAILED
-    ).length;
+    const validationFailedCount = failedRows.filter((row) => row.resultStatus === SYNC_RESULT_STATUS_VALIDATION_FAILED).length;
     const conflictCount = failedRows.filter((row) => row.resultStatus === SYNC_RESULT_STATUS_CONFLICT).length;
     const exhaustedCount = failedRows.filter((row) => row.resultStatus === SYNC_RESULT_STATUS_EXHAUSTED).length;
 
@@ -826,17 +824,13 @@ export const usePatrolController = (repository) => {
         } catch (syncError) {
           console.warn('[patrol] flushSyncQueue before validation failed', syncError);
           mayBeIncomplete = true;
-          setValidationWarning((prev) =>
-            prev ?? 'Sync flush failed. Backend validation may be incomplete.'
-          );
+          setValidationWarning((prev) => prev ?? 'Sync flush failed. Backend validation may be incomplete.');
         }
 
         const queueState = await inspectSyncQueue();
         if (queueState.hasProblems) {
           mayBeIncomplete = true;
-          setValidationWarning((prev) =>
-            prev ?? 'Some logs could not be synced. Backend validation may be incomplete.'
-          );
+          setValidationWarning((prev) => prev ?? 'Some logs could not be synced. Backend validation may be incomplete.');
         }
       } else {
         setValidationWarning('Patrol saved locally. Validation will be available after sync.');
@@ -856,11 +850,7 @@ export const usePatrolController = (repository) => {
         } catch (validationErr) {
           const message = extractApiErrorMessage(validationErr);
           setValidationError(message);
-          setValidationWarning(
-            (prev) =>
-              prev ??
-              'Validation failed. Summary may reflect provisional checkpoint data only.'
-          );
+          setValidationWarning((prev) => prev ?? 'Validation failed. Summary may reflect provisional checkpoint data only.');
           console.error('[patrol] backend validation failed', validationErr);
         } finally {
           setValidatingPatrol(false);
@@ -926,9 +916,7 @@ export const usePatrolController = (repository) => {
     validationResult,
     validationWarning,
     finalizingStep,
-    isFinalizingPatrol:
-      validatingPatrol ||
-      (finalizingStep !== FINALIZING_STEP.IDLE && finalizingStep !== FINALIZING_STEP.COMPLETED),
+    isFinalizingPatrol: validatingPatrol || (finalizingStep !== FINALIZING_STEP.IDLE && finalizingStep !== FINALIZING_STEP.COMPLETED),
 
     // Form handlers
     handleChange,

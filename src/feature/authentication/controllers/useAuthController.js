@@ -27,8 +27,7 @@ export function useAuthController() {
         return;
       }
 
-      const tokenRemoved =
-        event.key === AUTH_TOKEN_KEY && event.newValue == null && event.oldValue != null;
+      const tokenRemoved = event.key === AUTH_TOKEN_KEY && event.newValue == null && event.oldValue != null;
       const userRemoved = event.key === AUTH_USER_KEY && event.newValue == null && event.oldValue != null;
       const cleared = event.key === null;
 

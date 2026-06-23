@@ -44,14 +44,7 @@ export default function AnprLiveIndicator({ status = 'live', lastUpdatedAt = nul
       : null;
 
   return (
-    <Tooltip
-      title={
-        formattedLastUpdate
-          ? `${config.tooltip} · Last updated ${formattedLastUpdate}`
-          : config.tooltip
-      }
-      arrow
-    >
+    <Tooltip title={formattedLastUpdate ? `${config.tooltip} · Last updated ${formattedLastUpdate}` : config.tooltip} arrow>
       <Box
         component="span"
         sx={{
@@ -82,11 +75,7 @@ export default function AnprLiveIndicator({ status = 'live', lastUpdatedAt = nul
           sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600, letterSpacing: 0.5 }}
         />
         {formattedLastUpdate && status === 'live' ? (
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ display: { xs: 'none', md: 'inline' }, whiteSpace: 'nowrap' }}
-          >
+          <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', md: 'inline' }, whiteSpace: 'nowrap' }}>
             {formattedLastUpdate}
           </Typography>
         ) : null}

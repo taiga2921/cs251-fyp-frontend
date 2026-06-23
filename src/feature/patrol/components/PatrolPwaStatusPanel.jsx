@@ -190,11 +190,7 @@ export default function PatrolPwaStatusPanel({ patrolId, trackingActive }) {
 
   const queueSummary = useMemo(() => pendingQueueCount + failedQueueCount, [pendingQueueCount, failedQueueCount]);
 
-  const needsSyncAttention =
-    failedQueueCount > 0 ||
-    validationFailedCount > 0 ||
-    conflictCount > 0 ||
-    exhaustedCount > 0;
+  const needsSyncAttention = failedQueueCount > 0 || validationFailedCount > 0 || conflictCount > 0 || exhaustedCount > 0;
 
   return (
     <Paper sx={{ p: 2, mt: 2 }}>
@@ -298,9 +294,7 @@ export default function PatrolPwaStatusPanel({ patrolId, trackingActive }) {
         {pushMessage ? (
           <Alert
             severity={
-              pushMessage.includes('enabled') ||
-              pushMessage.includes('disabled') ||
-              pushMessage.includes('Test notification sent')
+              pushMessage.includes('enabled') || pushMessage.includes('disabled') || pushMessage.includes('Test notification sent')
                 ? 'success'
                 : 'warning'
             }

@@ -24,7 +24,6 @@ export default function CheckpointList() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const title = scopedZoneId ? 'Zone checkpoints' : 'Checkpoint management';
   const Wrapper = scopedZoneId ? DetailCard : MainCard;
   const wrapperProps = scopedZoneId
     ? { title: 'Zone details', avatar: <MapIcon size={24} />, onBack: controller.handleBack }

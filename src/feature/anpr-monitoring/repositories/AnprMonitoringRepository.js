@@ -126,10 +126,7 @@ export class AnprMonitoringRepository {
   }
 
   async getAnprEvents(params = {}) {
-    const envelope = this.assertSuccess(
-      await this.dataSource.getAnprEvents(params),
-      'Failed to load ANPR events'
-    );
+    const envelope = this.assertSuccess(await this.dataSource.getAnprEvents(params), 'Failed to load ANPR events');
     const { rows, meta } = unwrapPaginatedEnvelope(envelope);
     return {
       events: rows.map((event) => this.normalizeEvent(event)),
@@ -143,10 +140,7 @@ export class AnprMonitoringRepository {
   }
 
   async getAnprEventById(id) {
-    const envelope = this.assertSuccess(
-      await this.dataSource.getAnprEventById(id),
-      'Failed to load ANPR event'
-    );
+    const envelope = this.assertSuccess(await this.dataSource.getAnprEventById(id), 'Failed to load ANPR event');
     return this.normalizeEvent(envelope?.data ?? null);
   }
 
@@ -162,11 +156,7 @@ export class AnprMonitoringRepository {
   normalizeEvent(event) {
     if (!event || typeof event !== 'object') return null;
 
-    const images = sortImages(
-      (Array.isArray(event.images) ? event.images : [])
-        .map((image) => normalizeImage(image))
-        .filter(Boolean)
-    );
+    const images = sortImages((Array.isArray(event.images) ? event.images : []).map((image) => normalizeImage(image)).filter(Boolean));
 
     const imageMap = images.reduce((acc, image) => {
       if (image.imageType) acc[image.imageType] = image;

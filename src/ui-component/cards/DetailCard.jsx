@@ -7,8 +7,8 @@ import CardHeader from '@mui/material/CardHeader';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 
-import { Box, Button, IconButton, Paper } from '@mui/material';
-import { IconArrowLeft as BackIcon, IconPencil as EditIcon } from '@tabler/icons-react';
+import { Box, Button } from '@mui/material';
+import { IconArrowLeft as BackIcon } from '@tabler/icons-react';
 
 // constant
 const headerStyle = {

@@ -102,11 +102,7 @@ export default function PatrolMonitoringDashboard() {
           />
           <FormControl size="small" sx={{ minWidth: 140 }}>
             <InputLabel>Status</InputLabel>
-            <Select
-              label="Status"
-              value={controller.statusFilter}
-              onChange={(e) => controller.handleStatusFilterChange(e.target.value)}
-            >
+            <Select label="Status" value={controller.statusFilter} onChange={(e) => controller.handleStatusFilterChange(e.target.value)}>
               <MenuItem value="">All</MenuItem>
               <MenuItem value="active">Active</MenuItem>
               <MenuItem value="completed">Completed</MenuItem>
@@ -115,11 +111,7 @@ export default function PatrolMonitoringDashboard() {
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 160 }}>
             <InputLabel>Zone</InputLabel>
-            <Select
-              label="Zone"
-              value={controller.zoneFilter}
-              onChange={(e) => controller.handleZoneFilterChange(e.target.value)}
-            >
+            <Select label="Zone" value={controller.zoneFilter} onChange={(e) => controller.handleZoneFilterChange(e.target.value)}>
               <MenuItem value="">All zones</MenuItem>
               {controller.zones.map((zone) => (
                 <MenuItem key={zone.id} value={zone.id}>
@@ -133,9 +125,7 @@ export default function PatrolMonitoringDashboard() {
           </Button>
         </Stack>
 
-        {controller.error ? (
-          <Alert severity="error">{controller.error}</Alert>
-        ) : null}
+        {controller.error ? <Alert severity="error">{controller.error}</Alert> : null}
 
         {controller.loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>

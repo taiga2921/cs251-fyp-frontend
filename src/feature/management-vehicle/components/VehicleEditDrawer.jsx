@@ -1,15 +1,5 @@
 import PropTypes from 'prop-types';
-import {
-  Button,
-  Drawer,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-  Typography
-} from '@mui/material';
+import { Button, Drawer, FormControl, InputLabel, MenuItem, Select, Stack, TextField, Typography } from '@mui/material';
 
 const STATUS_OPTIONS = [
   { value: 'normal', label: 'Normal' },

@@ -16,53 +16,53 @@ import { PatrolTable, PatrolTableToolbar } from '../components';
  */
 
 export default function PatrolHistoryList() {
-   // Initialize dependencies using dependency injection pattern
-   const repository = new PatrolRepository(patrolService);
-   const controller = usePatrolController(repository);
+  // Initialize dependencies using dependency injection pattern
+  const repository = new PatrolRepository(patrolService);
+  const controller = usePatrolController(repository);
 
-   // Responsive design hooks
-   const theme = useTheme();
-   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  // Responsive design hooks
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-   // Show loading indicator while data is being fetched
-   if (controller.loading) {
-      return (
-         <MainCard title="Patrol  History">
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-               <CircularProgress />
-            </Box>
-         </MainCard>
-      );
-   }
-
-   return (
-      <MainCard title="Patrol History">
-         {/* Filtering and action toolbar */}
-         <PatrolTableToolbar
-            filterText={controller.filterText}
-            onFilterChange={controller.handleFilterChange}
-            onAddPatrol={controller.handleAddPatrol}
-         />
-
-         {/* Main table displaying patrol data */}
-         <PatrolTable
-            patrols={controller.patrols}
-            page={controller.page}
-            rowsPerPage={controller.rowsPerPage}
-            onView={controller.handleViewPatrol}
-            onEdit={controller.handleEditPatrol}
-            onDelete={controller.handleDeletePatrol}
-         />
-
-         {/* Pagination and rows per page controls */}
-         <PaginationFooter
-            page={controller.page}
-            rowsPerPage={controller.rowsPerPage}
-            filteredCount={controller.filteredCount}
-            onPageChange={controller.handleChangePage}
-            onRowsPerPageChange={controller.handleChangeRowsPerPage}
-            isMobile={isMobile}
-         />
+  // Show loading indicator while data is being fetched
+  if (controller.loading) {
+    return (
+      <MainCard title="Patrol  History">
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
       </MainCard>
-   );
+    );
+  }
+
+  return (
+    <MainCard title="Patrol History">
+      {/* Filtering and action toolbar */}
+      <PatrolTableToolbar
+        filterText={controller.filterText}
+        onFilterChange={controller.handleFilterChange}
+        onAddPatrol={controller.handleAddPatrol}
+      />
+
+      {/* Main table displaying patrol data */}
+      <PatrolTable
+        patrols={controller.patrols}
+        page={controller.page}
+        rowsPerPage={controller.rowsPerPage}
+        onView={controller.handleViewPatrol}
+        onEdit={controller.handleEditPatrol}
+        onDelete={controller.handleDeletePatrol}
+      />
+
+      {/* Pagination and rows per page controls */}
+      <PaginationFooter
+        page={controller.page}
+        rowsPerPage={controller.rowsPerPage}
+        filteredCount={controller.filteredCount}
+        onPageChange={controller.handleChangePage}
+        onRowsPerPageChange={controller.handleChangeRowsPerPage}
+        isMobile={isMobile}
+      />
+    </MainCard>
+  );
 }

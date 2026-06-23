@@ -30,10 +30,7 @@ export default function CheckpointCreate() {
       <DetailCard title="Create checkpoint" avatar={<CheckpointsIcon size={24} />} onBack={controller.handleCancel}>
         <CheckpointForm controller={controller} />
       </DetailCard>
-      <SuccessDialog
-        controller={controller}
-        msg="Checkpoint created successfully. Redirecting to checkpoint details..."
-      />
+      <SuccessDialog controller={controller} msg="Checkpoint created successfully. Redirecting to checkpoint details..." />
     </>
   );
 }

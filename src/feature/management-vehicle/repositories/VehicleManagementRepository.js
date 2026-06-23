@@ -41,7 +41,7 @@ export class VehicleManagementRepository {
       vehicleType: vehicle.vehicle_type ?? null,
       status,
       source,
-      sourceLabel: source === 'auto_detected' ? 'Auto-detected' : source === 'manual' ? 'Manual' : source ?? '—',
+      sourceLabel: source === 'auto_detected' ? 'Auto-detected' : source === 'manual' ? 'Manual' : (source ?? '—'),
       notes: vehicle.notes ?? null,
       notesSummary: summarizeNotes(vehicle.notes),
       createdAt: vehicle.created_at ?? null,

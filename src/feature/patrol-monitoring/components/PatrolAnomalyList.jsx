@@ -1,30 +1,13 @@
 import PropTypes from 'prop-types';
-import {
-  Box,
-  Chip,
-  List,
-  ListItemButton,
-  ListItemText,
-  Stack,
-  Typography
-} from '@mui/material';
+import { Box, Chip, List, ListItemButton, ListItemText, Stack, Typography } from '@mui/material';
 
-import {
-  countAnomaliesBySeverity,
-  formatAnomalyTimeRange,
-  getAnomalyTypeLabel
-} from '../utils/patrolAnomalyUtils';
+import { countAnomaliesBySeverity, formatAnomalyTimeRange, getAnomalyTypeLabel } from '../utils/patrolAnomalyUtils';
 
 function severityColor(severity) {
   return severity === 'major' ? 'error' : 'warning';
 }
 
-export default function PatrolAnomalyList({
-  anomalies = [],
-  selectedAnomalyId = null,
-  onSelectAnomaly,
-  showAnomalies = true
-}) {
+export default function PatrolAnomalyList({ anomalies = [], selectedAnomalyId = null, onSelectAnomaly, showAnomalies = true }) {
   if (!showAnomalies) {
     return null;
   }
@@ -45,12 +28,8 @@ export default function PatrolAnomalyList({
         <Typography variant="subtitle2">
           {counts.total} suspicious segment{counts.total === 1 ? '' : 's'}
         </Typography>
-        {counts.major > 0 ? (
-          <Chip size="small" label={`${counts.major} major`} color="error" variant="outlined" />
-        ) : null}
-        {counts.minor > 0 ? (
-          <Chip size="small" label={`${counts.minor} minor`} color="warning" variant="outlined" />
-        ) : null}
+        {counts.major > 0 ? <Chip size="small" label={`${counts.major} major`} color="error" variant="outlined" /> : null}
+        {counts.minor > 0 ? <Chip size="small" label={`${counts.minor} minor`} color="warning" variant="outlined" /> : null}
       </Stack>
       <List dense disablePadding sx={{ maxHeight: 280, overflow: 'auto' }}>
         {anomalies.map((item) => (
@@ -66,12 +45,7 @@ export default function PatrolAnomalyList({
                   <Typography variant="body2" fontWeight={600}>
                     {getAnomalyTypeLabel(item.type)}
                   </Typography>
-                  <Chip
-                    size="small"
-                    label={item.severity}
-                    color={severityColor(item.severity)}
-                    variant="outlined"
-                  />
+                  <Chip size="small" label={item.severity} color={severityColor(item.severity)} variant="outlined" />
                 </Stack>
               }
               secondary={

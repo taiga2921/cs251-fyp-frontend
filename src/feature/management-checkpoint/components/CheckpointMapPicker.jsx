@@ -161,8 +161,7 @@ export default function CheckpointMapPicker({
   return (
     <Box>
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-        Click the map or drag the marker to set coordinates. Drag the map to pan. The circle shows the checkpoint
-        radius.
+        Click the map or drag the marker to set coordinates. Drag the map to pan. The circle shows the checkpoint radius.
       </Typography>
       <Box sx={{ position: 'relative' }}>
         <Box

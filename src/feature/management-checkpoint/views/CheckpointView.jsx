@@ -48,12 +48,7 @@ export default function CheckpointView() {
   }
 
   return (
-    <DetailCard
-      title="Checkpoint details"
-      avatar={<PinIcon size={24} />}
-      onBack={controller.handleBack}
-      headerActions={editButton}
-    >
+    <DetailCard title="Checkpoint details" avatar={<PinIcon size={24} />} onBack={controller.handleBack} headerActions={editButton}>
       <CheckpointProfileData checkpoint={controller.checkpoint} isMobile={isMobile} />
       <br />
       <SectionHeader title="Map" />

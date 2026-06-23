@@ -1,14 +1,7 @@
 import PropTypes from 'prop-types';
 import { Navigate, useLocation } from 'react-router-dom';
 
-import {
-  clearAuthSession,
-  getAuthUserRole,
-  getDefaultRouteForRole,
-  hasAnyRole,
-  hasAuthToken,
-  validateAuthSession
-} from 'utils/auth';
+import { clearAuthSession, getAuthUserRole, hasAnyRole, hasAuthToken, validateAuthSession } from 'utils/auth';
 
 export default function RoleProtectedRoute({ allowedRoles, children }) {
   const location = useLocation();

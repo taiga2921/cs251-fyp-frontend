@@ -32,7 +32,7 @@ const operator = {
       type: 'item',
       url: '/admin/anpr-monitoring',
       icon: icons.IconCar
-    },
+    }
     // {
     //   id: 'operator-patrol',
     //   title: 'Patrol',
@@ -51,12 +51,12 @@ const operator = {
     //       type: 'item',
     //       url: '/operator/patrol/history'
     //     }
-        // {
-        //   id: 'operator-patrol-statistics',
-        //   title: 'Statistics',
-        //   type: 'item',
-        //   url: '/operator/patrol/statistics'
-        // }
+    // {
+    //   id: 'operator-patrol-statistics',
+    //   title: 'Statistics',
+    //   type: 'item',
+    //   url: '/operator/patrol/statistics'
+    // }
     //   ]
     // }
     // {

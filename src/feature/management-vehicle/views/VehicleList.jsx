@@ -1,14 +1,5 @@
 import { useMemo } from 'react';
-import {
-  Alert,
-  Box,
-  CircularProgress,
-  Snackbar,
-  Stack,
-  TextField,
-  useMediaQuery,
-  useTheme
-} from '@mui/material';
+import { Alert, Box, CircularProgress, Snackbar, Stack, TextField, useMediaQuery, useTheme } from '@mui/material';
 
 import MainCard from 'ui-component/cards/MainCard';
 import { PaginationFooter } from 'ui-component/table/PaginationFooter';
@@ -49,11 +40,7 @@ export default function VehicleList() {
           sx={{ maxWidth: 320 }}
         />
 
-        <VehicleTable
-          vehicles={controller.vehicles}
-          onView={controller.handleViewVehicle}
-          onEdit={controller.handleOpenEdit}
-        />
+        <VehicleTable vehicles={controller.vehicles} onView={controller.handleViewVehicle} onEdit={controller.handleOpenEdit} />
 
         {controller.pagination.total > 0 ? (
           <PaginationFooter

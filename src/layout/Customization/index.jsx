@@ -2,7 +2,7 @@ import PropTypes from 'prop-types';
 import { Activity, useState } from 'react';
 
 // material-ui
-import { useColorScheme, useTheme } from '@mui/material/styles';
+import { useColorScheme } from '@mui/material/styles';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
@@ -25,7 +25,7 @@ import SimpleBar from 'ui-component/third-party/SimpleBar';
 import useConfig from 'hooks/useConfig';
 
 // assets
-import { IconSettings, IconPlus } from '@tabler/icons-react';
+import { IconPlus } from '@tabler/icons-react';
 
 function CustomTabPanel({ children, value, index, ...other }) {
   return (
@@ -38,7 +38,6 @@ function CustomTabPanel({ children, value, index, ...other }) {
 }
 
 export default function Customization() {
-  const theme = useTheme();
   const { resetState } = useConfig();
   const { setMode } = useColorScheme();
 
