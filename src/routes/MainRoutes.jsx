@@ -41,6 +41,9 @@ const AdminPatrolSessionDetail = Loadable(lazy(() => import('../feature/patrol-m
 const AdminAnprMonitoring = Loadable(lazy(() => import('../feature/anpr-monitoring/views/AnprEventList')));
 const AdminAnprEventDetail = Loadable(lazy(() => import('../feature/anpr-monitoring/views/AnprEventDetail')));
 
+const AdminVehicleManagement = Loadable(lazy(() => import('../feature/management-vehicle/views/VehicleList')));
+const AdminVehicleManagementView = Loadable(lazy(() => import('../feature/management-vehicle/views/VehicleDetail')));
+
 const Forbidden = Loadable(lazy(() => import('views/errors/Forbidden')));
 
 // utilities routing
@@ -175,6 +178,14 @@ const MainRoutes = {
     {
       path: 'admin/anpr-monitoring/:anprEventId',
       element: adminOrOperator(<AdminAnprEventDetail />)
+    },
+    {
+      path: 'admin/management-vehicle',
+      element: adminOnly(<AdminVehicleManagement />)
+    },
+    {
+      path: 'admin/management-vehicle/view/:vehicleId',
+      element: adminOnly(<AdminVehicleManagementView />)
     },
 
     {

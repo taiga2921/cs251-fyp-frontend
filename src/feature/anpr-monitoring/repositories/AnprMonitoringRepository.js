@@ -45,14 +45,17 @@ const normalizeCamera = (camera) => {
 
 const normalizeVehicle = (vehicle) => {
   if (!vehicle || typeof vehicle !== 'object') return null;
+  const source = vehicle.source ?? null;
   return {
     id: vehicle.id ?? null,
     plateNumber: vehicle.plate_number ?? null,
     ownerName: vehicle.owner_name ?? null,
     vehicleType: vehicle.vehicle_type ?? null,
     status: vehicle.status ?? null,
-    source: vehicle.source ?? null,
-    notes: vehicle.notes ?? null
+    source,
+    sourceLabel: source === 'auto_detected' ? 'Auto-detected' : source === 'manual' ? 'Manual' : source,
+    notes: vehicle.notes ?? null,
+    isAutoDetected: source === 'auto_detected'
   };
 };
 

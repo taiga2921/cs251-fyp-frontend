@@ -59,7 +59,7 @@ The frontend currently provides:
 | Camera management          | **Partially implemented**            | Menu item exists; dedicated UI not complete.                                                                                                                                                                                                                                                                                                                                                                                       |
 | Patrol Home (`/patrol`)    | **Implemented (functional)**         | `feature/patrol` — **all roles** (Admin, Security Operator, Guard); Laravel **`patrol_sessions.id`** is end-to-end **`patrolId`** (Dexie **`location_logs.patrolId`** and **`POST /pwa/sync`** payload **`patrolId`** match); checkpoints via **`checkpoint-events`**; route crumbs via **`POST /patrol-routes`**; GPS via **`usePatrolController`** + **`services/geolocationService`**; **`PatrolPwaStatusPanel`**. See [Section 15](#15-progressive-web-app-pwa). |
 | Patrol Monitoring          | **Implemented**                      | `feature/patrol-monitoring` — **Admin + Security Operator only**; dashboard + session detail at **`/admin/patrol-monitoring`**; sidebar item under **Operator** group with **`IconMapPin2`**; lists patrol sessions, summaries, checkpoint events, **route map** (Leaflet CDN) with **suspicious segment overlays** (Milestone 10) and **patrol replay** (Milestone 11); **live updates** via Laravel Reverb + Echo (30s polling fallback); **Re-run Validation** calls backend **`POST …/validate`**. |
-| ANPR Monitoring            | **Implemented**                      | `feature/anpr-monitoring` — **Admin + Security Operator only**; list + detail at **`/admin/anpr-monitoring`**; sidebar **ANPR Monitoring** (`IconCar`); server-side filters via **`GET /anpr-events`**; evidence gallery with protected file previews; **M12** live polling (5s) with LIVE indicator, new-row highlight, manual refresh preserved. |
+| ANPR Monitoring            | **Implemented**                      | `feature/anpr-monitoring` — **Admin + Security Operator only**; list + detail at **`/admin/anpr-monitoring`**; sidebar **ANPR Monitoring** (`IconCar`); server-side filters via **`GET /anpr-events`**; evidence gallery with protected file previews; **M12** live polling (5s) with LIVE indicator, new-row highlight, manual refresh preserved; **M13** linked vehicle section on event detail with admin navigation to vehicle management. |
 | PWA offline / sync         | **Implemented (core)**               | IndexedDB + sync queue + global **`NetworkSnackbar`**; **`POST /api/pwa/sync`** (**JWT**) drains **`location_log`** rows idempotently. **Background Sync** registers tag **`pwa-sync-queue`** when the queue has work; SW **`sync`** posts **`PWA_SYNC_REQUEST`** to clients → **`flushSyncQueue`**. **Retry Sync** + auto-flush on **`online`** remain when Background Sync is unavailable.                                       |
 | Web Push (PWA)             | **Implemented**                      | Subscribe/unsubscribe + **outbound** patrol alerts from Laravel (`WebPushNotificationService`). **`PatrolPwaStatusPanel`**: permission/subscription state, **Send Test Notification** (`POST /push-notifications/test` — `success: true` only when at least one device receives the push; `data` includes delivery counts). Reverb realtime remains separate.                                                                      |
 | Theme Customization        | Implemented                          | Font family + border radius drawer (toggle button itself is currently commented out).                                                                                                                                                                                                                                                                                                                                              |
@@ -72,6 +72,7 @@ The frontend currently provides:
 - `feature/patrol` — guard patrol session UI + **`usePatrolController`** + Laravel patrol/checkpoint/route APIs + patrol geolocation service.
 - `feature/patrol-monitoring` — admin/operator patrol surveillance dashboard (session list, detail, re-validation).
 - `feature/anpr-monitoring` — admin/operator ANPR detection monitoring (event list, detail, evidence gallery).
+- `feature/management-vehicle` — **M13** admin vehicle record management (list, detail, edit drawer).
 - `pwa/` — Dexie IndexedDB, offline sync queue flush, network hook, browser geolocation primitives.
 - `views/dashboard/Default` — demo dashboard.
 - `views/pages/authentication` — Login + Register pages.
@@ -1887,6 +1888,31 @@ Each overlay has a Leaflet popup: type, severity, message, time range, distance/
 **Security:** Does not render `event.raw` or backend lifecycle logs. Camera credentials and network details are omitted from ANPR API responses via `AnprCameraResource` on the backend.
 
 **Cross-repo doc:** `ai-anpr-v1/docs/m12-live-anpr-monitoring-architecture.md` (M12); `ai-anpr-v1/docs/m10-frontend-anpr-feature-architecture.md` (M10)
+
+### Vehicle management (Milestone 13)
+
+**Module:** `src/feature/management-vehicle/` — view → controller → repository → `vehicleManagementService`.
+
+| File | Role |
+| ---- | ---- |
+| `views/VehicleList.jsx` | Admin list: search, table, pagination, edit drawer |
+| `views/VehicleDetail.jsx` | Admin detail: read-only plate/source, editable metadata via drawer |
+| `controllers/useVehicleManagementController.js` | List + detail controllers |
+| `repositories/VehicleManagementRepository.js` | Normalize vehicles; build update payloads |
+| `datasources/vehicleManagementService.js` | Laravel `/vehicles` adapter |
+| `components/VehicleTable.jsx` | Vehicle list table |
+| `components/VehicleEditDrawer.jsx` | Edit owner/type/status/notes; plate/source disabled |
+| `components/VehicleStatusChip.jsx` | Status and source chips |
+
+**Routes:** `/admin/management-vehicle`, `/admin/management-vehicle/view/:vehicleId` — **Admin only**.
+
+**Menu:** Admin → Management → Vehicle.
+
+**API:** `GET /vehicles`, `GET /vehicles/{id}`, `PATCH /vehicles/{id}` (admin-only). Plate number and source are read-only in the UI and prohibited on backend update.
+
+**ANPR detail link:** Admins see **Open vehicle record** on linked vehicle cards in ANPR event detail. Security Operators see vehicle context read-only without admin management navigation.
+
+**Cross-repo doc:** `ai-anpr-v1/docs/m13-linked-vehicle-record-architecture.md`
 
 ### Sidebar install UX
 

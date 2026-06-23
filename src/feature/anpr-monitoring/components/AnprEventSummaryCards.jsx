@@ -1,5 +1,9 @@
 import PropTypes from 'prop-types';
-import { Grid, Paper, Stack, Typography } from '@mui/material';
+import { Button, Grid, Paper, Stack, Typography } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
+
+import { hasRole, ROLES } from 'utils/auth';
+import VehicleStatusChip from '../../management-vehicle/components/VehicleStatusChip';
 
 function SummaryCard({ label, value, helper }) {
   return (
@@ -27,6 +31,9 @@ SummaryCard.propTypes = {
 
 export default function AnprEventSummaryCards({ event }) {
   if (!event) return null;
+
+  const isAdmin = hasRole(ROLES.ADMIN);
+  const vehicle = event.vehicle;
 
   return (
     <Grid container spacing={2}>
@@ -79,25 +86,47 @@ export default function AnprEventSummaryCards({ event }) {
       <Grid size={{ xs: 12, md: 6 }}>
         <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
           <Typography variant="subtitle2" gutterBottom>
-            Vehicle
+            Linked vehicle
           </Typography>
-          {event.vehicle ? (
-            <Stack spacing={0.5}>
-              <Typography variant="body2">{event.vehicle.plateNumber ?? event.plateNumber}</Typography>
-              {event.vehicle.ownerName ? (
-                <Typography variant="caption" color="text.secondary">
-                  Owner: {event.vehicle.ownerName}
+          {vehicle ? (
+            <Stack spacing={1}>
+              <Typography variant="body1" fontWeight={600}>
+                {vehicle.plateNumber ?? event.plateNumber}
+              </Typography>
+              {vehicle.isAutoDetected && !vehicle.ownerName ? (
+                <Typography variant="body2" color="text.secondary">
+                  Auto-detected vehicle record
                 </Typography>
               ) : null}
-              {event.vehicle.vehicleType ? (
-                <Typography variant="caption" color="text.secondary">
-                  Type: {event.vehicle.vehicleType}
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {vehicle.status ? <VehicleStatusChip kind="status" value={vehicle.status} /> : null}
+                {vehicle.source ? <VehicleStatusChip kind="source" value={vehicle.source} /> : null}
+              </Stack>
+              {vehicle.ownerName ? (
+                <Typography variant="body2" color="text.secondary">
+                  Owner: {vehicle.ownerName}
                 </Typography>
               ) : null}
-              {event.vehicle.status ? (
-                <Typography variant="caption" color="text.secondary">
-                  Status: {event.vehicle.status}
+              {vehicle.vehicleType ? (
+                <Typography variant="body2" color="text.secondary">
+                  Type: {vehicle.vehicleType}
                 </Typography>
+              ) : null}
+              {vehicle.notes ? (
+                <Typography variant="body2" color="text.secondary">
+                  Notes: {vehicle.notes}
+                </Typography>
+              ) : null}
+              {isAdmin && vehicle.id ? (
+                <Button
+                  component={RouterLink}
+                  to={`/admin/management-vehicle/view/${vehicle.id}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ alignSelf: 'flex-start', mt: 0.5 }}
+                >
+                  Open vehicle record
+                </Button>
               ) : null}
             </Stack>
           ) : (
