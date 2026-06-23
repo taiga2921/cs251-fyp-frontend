@@ -97,7 +97,9 @@ export class AnprMonitoringRepository {
   buildListQueryParams(filters = {}, page = 0, rowsPerPage = 10) {
     const params = {
       page: page + 1,
-      per_page: rowsPerPage
+      per_page: rowsPerPage,
+      sort: 'detection_time',
+      direction: 'desc'
     };
 
     const plateSearch = String(filters.plateSearch ?? '').trim();

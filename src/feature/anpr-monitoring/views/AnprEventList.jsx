@@ -23,6 +23,24 @@ import { AnprMonitoringRepository } from '../repositories/AnprMonitoringReposito
 import { useAnprMonitoringController } from '../controllers/useAnprMonitoringController';
 import AnprEventTable from '../components/AnprEventTable';
 import AnprEmptyState from '../components/AnprEmptyState';
+import AnprLiveIndicator from '../components/AnprLiveIndicator';
+
+function AnprMonitoringTitle() {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 0.5
+      }}
+    >
+      <Typography component="span" variant="h3">
+        ANPR Monitoring
+      </Typography>
+    </Box>
+  );
+}
 
 export default function AnprEventList() {
   const repositoryRef = useRef(null);
@@ -36,7 +54,7 @@ export default function AnprEventList() {
 
   if (controller.loading && controller.events.length === 0) {
     return (
-      <MainCard title="ANPR Monitoring">
+      <MainCard title={<AnprMonitoringTitle />}>
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress />
         </Box>
@@ -44,9 +62,18 @@ export default function AnprEventList() {
     );
   }
 
+  const titleWithLive = (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5 }}>
+      <Typography component="span" variant="h3">
+        ANPR Monitoring
+      </Typography>
+      <AnprLiveIndicator status={controller.liveStatus} lastUpdatedAt={controller.lastUpdatedAt} />
+    </Box>
+  );
+
   return (
     <MainCard
-      title="ANPR Monitoring"
+      title={titleWithLive}
       secondary={
         <Button
           variant="outlined"
@@ -63,6 +90,24 @@ export default function AnprEventList() {
           Review ANPR detections delivered from the AI runtime through the Laravel backend, including
           plate reads, camera context, and evidence metadata.
         </Typography>
+
+        {controller.lastUpdatedAt ? (
+          <Typography variant="caption" color="text.secondary">
+            Last updated:{' '}
+            {new Intl.DateTimeFormat('en-MY', {
+              timeZone: 'Asia/Kuala_Lumpur',
+              dateStyle: 'medium',
+              timeStyle: 'medium'
+            }).format(controller.lastUpdatedAt)}
+            {controller.liveStatus === 'reconnecting' ? ' · Live refresh failed, retrying…' : null}
+          </Typography>
+        ) : null}
+
+        {controller.liveError && controller.liveStatus === 'reconnecting' ? (
+          <Alert severity="warning" sx={{ py: 0.5 }}>
+            {controller.liveError}
+          </Alert>
+        ) : null}
 
         {controller.error ? (
           <Alert severity="error">{controller.error}</Alert>
@@ -112,7 +157,11 @@ export default function AnprEventList() {
             }
           />
         ) : (
-          <AnprEventTable events={controller.events} onViewDetails={controller.handleViewDetails} />
+          <AnprEventTable
+            events={controller.events}
+            highlightedEventIds={controller.highlightedEventIds}
+            onViewDetails={controller.handleViewDetails}
+          />
         )}
 
         {controller.pagination.total > 0 ? (

@@ -14,10 +14,12 @@ import {
 import { MalaysiaTime } from 'ui-component/MalaysiaTime';
 import AnprStatusChip from './AnprStatusChip';
 
-export default function AnprEventTable({ events, onViewDetails }) {
+export default function AnprEventTable({ events, highlightedEventIds = [], onViewDetails }) {
   if (!events.length) {
     return null;
   }
+
+  const highlightSet = new Set(highlightedEventIds);
 
   return (
     <TableContainer component={Paper} variant="outlined">
@@ -36,7 +38,19 @@ export default function AnprEventTable({ events, onViewDetails }) {
         </TableHead>
         <TableBody>
           {events.map((event) => (
-            <TableRow key={event.id} hover>
+            <TableRow
+              key={event.id}
+              hover
+              sx={{
+                transition: 'background-color 0.4s ease',
+                ...(highlightSet.has(event.id)
+                  ? {
+                      bgcolor: 'action.selected',
+                      '&:hover': { bgcolor: 'action.selected' }
+                    }
+                  : {})
+              }}
+            >
               <TableCell>
                 <Typography variant="subtitle2">{event.plateNumber}</Typography>
               </TableCell>
@@ -77,5 +91,6 @@ export default function AnprEventTable({ events, onViewDetails }) {
 
 AnprEventTable.propTypes = {
   events: PropTypes.arrayOf(PropTypes.object).isRequired,
+  highlightedEventIds: PropTypes.arrayOf(PropTypes.string),
   onViewDetails: PropTypes.func.isRequired
 };

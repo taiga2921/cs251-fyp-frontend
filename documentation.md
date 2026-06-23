@@ -41,7 +41,7 @@ The frontend currently provides:
 - **Progressive Web App (PWA)** support via `vite-plugin-pwa` (service worker precache, web app manifest, optional **Install App** UI in the sidebar when the browser fires `beforeinstallprompt`).
 - **PWA client layer (`src/pwa/`)** — offline-aware UX (`NetworkSnackbar`), Dexie **IndexedDB** for patrol location logs and a **sync queue**, a **`flushSyncQueue`** sync engine posting to `POST /api/pwa/sync`, **Background Sync** (tag **`pwa-sync-queue`**: SW notifies clients → app-thread flush; falls back to **`online`** + **Retry Sync** when unsupported), **`pushNotificationService`** (subscribe/unsubscribe → `POST/DELETE /api/push-subscriptions`; **outbound** test → `POST /api/push-notifications/test`), and shared **`useNetworkStatus`**. Custom SW: **`public/push-handlers.js`** (push display + **`notificationclick`** deep links + Background **`sync`**).
 - **Patrol module (`feature/patrol`)** — single guard page **`views/PartrolHome.jsx`** + **`usePatrolController`**: creates Laravel **`patrol_sessions`** and **`checkpoint-events`** placeholders, posts GPS breadcrumbs to **`POST /patrol-routes`**, and drives live GPS only via **`feature/patrol/services/geolocationService`** ( **`saveLocationLog`** → Dexie + **`sync_queue`**). **Stop Patrol** runs: flush PWA sync → **`POST /patrol-sessions/{id}/validate`** (when online) → **`GET /patrol-sessions/{id}/summary`**; results in **`PatrolSummaryCard.jsx`** (backend validation section + final summary). Live geofence PATCH confidence (80/65) remains **provisional** until backend validation. **`components/PatrolTracking.jsx`** is presentational; **`PatrolPwaStatusPanel.jsx`** shows sync/GPS telemetry and sync-queue warnings. Raw **`navigator.geolocation`** is not used from the controller.
-- **ANPR Monitoring (`feature/anpr-monitoring`)** — **M10** admin/operator module at **`/admin/anpr-monitoring`**: lists ANPR detections from Laravel with server-side filters (plate, validity, flagged), shows event detail with summary cards and evidence gallery; evidence previews load via backend `url` / `image_url` and JWT-authenticated fetch to **`GET /anpr-images/{id}/file`**; no event logs or raw metadata in the UI.
+- **ANPR Monitoring (`feature/anpr-monitoring`)** — **M10** admin/operator module at **`/admin/anpr-monitoring`**: lists ANPR detections from Laravel with server-side filters (plate, validity, flagged), shows event detail with summary cards and evidence gallery; evidence previews load via backend `url` / `image_url` and JWT-authenticated fetch to **`GET /anpr-images/{id}/file`**; no event logs or raw metadata in the UI. **M12:** live polling auto-refreshes the list every 5 seconds with a blinking red LIVE indicator beside the table title (tooltip: **Live update**); new rows are temporarily highlighted; polling failures show degraded RECONNECTING state without clearing existing rows; manual refresh remains available.
 
 ### Core Functionality
 
@@ -59,7 +59,7 @@ The frontend currently provides:
 | Camera management          | **Partially implemented**            | Menu item exists; dedicated UI not complete.                                                                                                                                                                                                                                                                                                                                                                                       |
 | Patrol Home (`/patrol`)    | **Implemented (functional)**         | `feature/patrol` — **all roles** (Admin, Security Operator, Guard); Laravel **`patrol_sessions.id`** is end-to-end **`patrolId`** (Dexie **`location_logs.patrolId`** and **`POST /pwa/sync`** payload **`patrolId`** match); checkpoints via **`checkpoint-events`**; route crumbs via **`POST /patrol-routes`**; GPS via **`usePatrolController`** + **`services/geolocationService`**; **`PatrolPwaStatusPanel`**. See [Section 15](#15-progressive-web-app-pwa). |
 | Patrol Monitoring          | **Implemented**                      | `feature/patrol-monitoring` — **Admin + Security Operator only**; dashboard + session detail at **`/admin/patrol-monitoring`**; sidebar item under **Operator** group with **`IconMapPin2`**; lists patrol sessions, summaries, checkpoint events, **route map** (Leaflet CDN) with **suspicious segment overlays** (Milestone 10) and **patrol replay** (Milestone 11); **live updates** via Laravel Reverb + Echo (30s polling fallback); **Re-run Validation** calls backend **`POST …/validate`**. |
-| ANPR Monitoring            | **Implemented**                      | `feature/anpr-monitoring` — **Admin + Security Operator only**; list + detail at **`/admin/anpr-monitoring`**; sidebar **ANPR Monitoring** (`IconCar`); server-side filters via **`GET /anpr-events`**; evidence gallery with protected file previews; manual refresh only (no realtime). |
+| ANPR Monitoring            | **Implemented**                      | `feature/anpr-monitoring` — **Admin + Security Operator only**; list + detail at **`/admin/anpr-monitoring`**; sidebar **ANPR Monitoring** (`IconCar`); server-side filters via **`GET /anpr-events`**; evidence gallery with protected file previews; **M12** live polling (5s) with LIVE indicator, new-row highlight, manual refresh preserved. |
 | PWA offline / sync         | **Implemented (core)**               | IndexedDB + sync queue + global **`NetworkSnackbar`**; **`POST /api/pwa/sync`** (**JWT**) drains **`location_log`** rows idempotently. **Background Sync** registers tag **`pwa-sync-queue`** when the queue has work; SW **`sync`** posts **`PWA_SYNC_REQUEST`** to clients → **`flushSyncQueue`**. **Retry Sync** + auto-flush on **`online`** remain when Background Sync is unavailable.                                       |
 | Web Push (PWA)             | **Implemented**                      | Subscribe/unsubscribe + **outbound** patrol alerts from Laravel (`WebPushNotificationService`). **`PatrolPwaStatusPanel`**: permission/subscription state, **Send Test Notification** (`POST /push-notifications/test` — `success: true` only when at least one device receives the push; `data` includes delivery counts). Reverb realtime remains separate.                                                                      |
 | Theme Customization        | Implemented                          | Font family + border radius drawer (toggle button itself is currently commented out).                                                                                                                                                                                                                                                                                                                                              |
@@ -761,7 +761,7 @@ Laravel **`ZoneController@index`** returns **`{ success, message, data }`** wher
 
 | Method              | HTTP call                                      | Notes                                                                                                                                                                                                 |
 | ------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getAnprEvents`     | `GET /anpr-events`                             | Query: `page`, `per_page`, `plate_number`, `is_valid`, `is_flagged` (built by `repository.buildListQueryParams`). Backend also supports `search`, `date_from`, `date_to`, `camera_id` when needed. |
+| `getAnprEvents`     | `GET /anpr-events`                             | Query: `page`, `per_page`, `plate_number`, `is_valid`, `is_flagged`, `sort` (`detection_time` default), `direction` (`desc` default) (built by `repository.buildListQueryParams`). Backend also supports `search`, `date_from`, `date_to`, `camera_id`, `since` when needed. |
 | `getAnprEventById`  | `GET /anpr-events/{id}`                        | Primary detail source; includes safe nested `camera`, `vehicle`, `images`.                                                                                                                            |
 | `getAnprImages`     | `GET /anpr-images`                             | Fallback when detail has no images (`anpr_event_id`, `per_page=100`).                                                                                                                               |
 
@@ -1858,24 +1858,27 @@ Each overlay has a Leaflet popup: type, severity, message, time range, distance/
 
 **Provisional vs authoritative:** Dashboard reflects backend-persisted `checkpoint_events` after validation; guard live PATCH scores remain provisional until validate runs.
 
-### ANPR monitoring dashboard (Milestone 10)
+### ANPR monitoring dashboard (Milestone 10 + M12 live polling)
 
 **Module:** `src/feature/anpr-monitoring/` — view → controller → repository → `anprMonitoringService`.
 
 | File                                           | Role                                                                                                      |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `views/AnprEventList.jsx`                      | List page: filters, table, pagination, refresh                                                              |
+| `views/AnprEventList.jsx`                      | List page: filters, table, pagination, refresh, LIVE indicator, last updated line                         |
 | `views/AnprEventDetail.jsx`                    | Detail page: status chips, summary cards, evidence gallery, back/refresh                                  |
-| `controllers/useAnprMonitoringController.js`   | `useAnprMonitoringController` (list) + `useAnprEventDetailController` (detail); local state only          |
-| `repositories/AnprMonitoringRepository.js`     | Normalize events/images; build backend filter query params; unwrap Laravel paginator                        |
+| `controllers/useAnprMonitoringController.js`   | `useAnprMonitoringController` (list + M12 live polling) + `useAnprEventDetailController` (detail)         |
+| `repositories/AnprMonitoringRepository.js`     | Normalize events/images; build backend filter query params (`sort`, `direction`); unwrap Laravel paginator |
 | `datasources/anprMonitoringService.js`         | Laravel API adapter (`/anpr-events`, `/anpr-images`)                                                     |
-| `components/AnprEventTable.jsx`                | Detection table                                                                                           |
+| `components/AnprEventTable.jsx`                | Detection table with new-row highlighting                                                               |
+| `components/AnprLiveIndicator.jsx`             | Blinking red LIVE / RECONNECTING indicator (tooltip: **Live update**)                                   |
 | `components/AnprEventSummaryCards.jsx`         | Plate, confidence, camera, vehicle, coordinates                                                         |
 | `components/AnprEvidenceGallery.jsx`           | Ordered full/plate/annotated cards; JWT blob fetch for protected file URLs                                |
 | `components/AnprStatusChip.jsx`                | Validity, flagged, evidence chips                                                                         |
 | `components/AnprEmptyState.jsx`                | Empty list placeholder                                                                                    |
 
-**List:** `GET /anpr-events` with server pagination and filters (`plate_number`, `is_valid`, `is_flagged`). Manual **Refresh** reloads the current page.
+**List:** `GET /anpr-events` with server pagination and filters (`plate_number`, `is_valid`, `is_flagged`, `sort=detection_time`, `direction=desc`). **M12:** auto-refreshes every 5 seconds while the page is open; manual **Refresh** reloads the current page; new detections are highlighted for ~4 seconds.
+
+**Live indicator:** Red blinking dot + `LIVE` chip beside the **ANPR Monitoring** title. Tooltip: **Live update**. On polling failure, shows `RECONNECTING` without clearing existing rows.
 
 **Detail:** `GET /anpr-events/{id}` first; `GET /anpr-images?anpr_event_id=…` only when images are missing from the detail payload. Displays summary + evidence only — **no** event logs and **no** raw metadata panel.
 
@@ -1883,9 +1886,7 @@ Each overlay has a Leaflet popup: type, severity, message, time range, distance/
 
 **Security:** Does not render `event.raw` or backend lifecycle logs. Camera credentials and network details are omitted from ANPR API responses via `AnprCameraResource` on the backend.
 
-**Known limitation:** No realtime ANPR feed; manual refresh only.
-
-**Cross-repo doc:** `ai-anpr-v1/docs/m10-frontend-anpr-feature-architecture.md`
+**Cross-repo doc:** `ai-anpr-v1/docs/m12-live-anpr-monitoring-architecture.md` (M12); `ai-anpr-v1/docs/m10-frontend-anpr-feature-architecture.md` (M10)
 
 ### Sidebar install UX
 

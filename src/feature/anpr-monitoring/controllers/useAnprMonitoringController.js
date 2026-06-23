@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 const DEFAULT_FILTERS = {
@@ -6,6 +6,9 @@ const DEFAULT_FILTERS = {
   validity: 'all',
   flagged: 'all'
 };
+
+const POLL_INTERVAL_MS = 5000;
+const HIGHLIGHT_DURATION_MS = 4000;
 
 export const useAnprMonitoringController = (repository) => {
   const navigate = useNavigate();
@@ -19,18 +22,83 @@ export const useAnprMonitoringController = (repository) => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
+  const [liveEnabled, setLiveEnabled] = useState(true);
+  const [liveStatus, setLiveStatus] = useState('live');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const [liveError, setLiveError] = useState(null);
+  const [highlightedEventIds, setHighlightedEventIds] = useState([]);
+
+  const isMountedRef = useRef(true);
+  const pollTimerRef = useRef(null);
+  const inFlightRef = useRef(false);
+  const lastSeenEventIdsRef = useRef(new Set());
+  const highlightTimersRef = useRef(new Map());
+
+  const clearHighlightTimer = useCallback((eventId) => {
+    const timer = highlightTimersRef.current.get(eventId);
+    if (timer) {
+      clearTimeout(timer);
+      highlightTimersRef.current.delete(eventId);
+    }
+  }, []);
+
+  const addHighlights = useCallback(
+    (newIds) => {
+      if (!newIds.length) return;
+
+      setHighlightedEventIds((prev) => {
+        const merged = new Set(prev);
+        newIds.forEach((id) => merged.add(id));
+        return Array.from(merged);
+      });
+
+      newIds.forEach((eventId) => {
+        clearHighlightTimer(eventId);
+        const timer = setTimeout(() => {
+          if (!isMountedRef.current) return;
+          setHighlightedEventIds((prev) => prev.filter((id) => id !== eventId));
+          highlightTimersRef.current.delete(eventId);
+        }, HIGHLIGHT_DURATION_MS);
+        highlightTimersRef.current.set(eventId, timer);
+      });
+    },
+    [clearHighlightTimer]
+  );
+
   const loadEvents = useCallback(
-    async ({ isRefresh = false } = {}) => {
+    async ({ isRefresh = false, isPoll = false } = {}) => {
+      if (inFlightRef.current) return;
+
+      inFlightRef.current = true;
+
       try {
         if (isRefresh) {
           setRefreshing(true);
-        } else {
+        } else if (!isPoll) {
           setLoading(true);
         }
-        setError(null);
+
+        if (!isPoll) {
+          setError(null);
+          setLiveError(null);
+        }
 
         const params = repository.buildListQueryParams(filters, page, rowsPerPage);
         const { events: rows, pagination: meta } = await repository.getAnprEvents(params);
+
+        if (!isMountedRef.current) return;
+
+        const newIds = rows.map((row) => row.id).filter(Boolean);
+        const previousIds = lastSeenEventIdsRef.current;
+
+        if (isPoll && previousIds.size > 0) {
+          const appeared = newIds.filter((id) => !previousIds.has(id));
+          if (appeared.length) {
+            addHighlights(appeared);
+          }
+        }
+
+        lastSeenEventIdsRef.current = new Set(newIds);
 
         setEvents(rows);
         setPagination({
@@ -39,44 +107,111 @@ export const useAnprMonitoringController = (repository) => {
           perPage: meta.perPage,
           lastPage: meta.lastPage
         });
+        setLastUpdatedAt(new Date());
+        setLiveStatus('live');
+        setLiveError(null);
+
+        if (!isPoll) {
+          setError(null);
+        }
       } catch (err) {
-        setError(err.message || 'Failed to load ANPR events');
-        setEvents([]);
-        setPagination({ total: 0, page: 1, perPage: rowsPerPage, lastPage: 1 });
+        if (!isMountedRef.current) return;
+
+        const message = err.message || 'Failed to load ANPR events';
+
+        if (isPoll) {
+          setLiveStatus('reconnecting');
+          setLiveError(message);
+        } else {
+          setError(message);
+          setEvents([]);
+          setPagination({ total: 0, page: 1, perPage: rowsPerPage, lastPage: 1 });
+        }
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        inFlightRef.current = false;
+        if (isMountedRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
-    [repository, filters, page, rowsPerPage]
+    [repository, filters, page, rowsPerPage, addHighlights]
   );
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      highlightTimersRef.current.forEach((timer) => clearTimeout(timer));
+      highlightTimersRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
 
+  useEffect(() => {
+    if (!liveEnabled) {
+      setLiveStatus('paused');
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return undefined;
+    }
+
+    const schedulePoll = () => {
+      pollTimerRef.current = setTimeout(async () => {
+        if (!isMountedRef.current || !liveEnabled) return;
+        await loadEvents({ isPoll: true });
+        if (isMountedRef.current && liveEnabled) {
+          schedulePoll();
+        }
+      }, POLL_INTERVAL_MS);
+    };
+
+    schedulePoll();
+
+    return () => {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, [liveEnabled, loadEvents]);
+
   const handlePlateSearchChange = (value) => {
     setFilters((prev) => ({ ...prev, plateSearch: value }));
     setPage(0);
+    lastSeenEventIdsRef.current = new Set();
   };
 
   const handleValidityFilterChange = (value) => {
     setFilters((prev) => ({ ...prev, validity: value }));
     setPage(0);
+    lastSeenEventIdsRef.current = new Set();
   };
 
   const handleFlaggedFilterChange = (value) => {
     setFilters((prev) => ({ ...prev, flagged: value }));
     setPage(0);
+    lastSeenEventIdsRef.current = new Set();
   };
 
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
+    lastSeenEventIdsRef.current = new Set();
   };
 
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
+    lastSeenEventIdsRef.current = new Set();
   };
 
   const handleViewDetails = (anprEventId) => {
@@ -96,6 +231,12 @@ export const useAnprMonitoringController = (repository) => {
     loading,
     refreshing,
     error,
+    liveEnabled,
+    liveStatus,
+    lastUpdatedAt,
+    liveError,
+    highlightedEventIds,
+    setLiveEnabled,
     handlePlateSearchChange,
     handleValidityFilterChange,
     handleFlaggedFilterChange,
