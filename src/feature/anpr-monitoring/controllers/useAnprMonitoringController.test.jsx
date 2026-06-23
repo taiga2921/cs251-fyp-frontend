@@ -92,6 +92,93 @@ describe('useAnprMonitoringController', () => {
       expect(result.current.liveError).toBe('Network down');
     });
 
+    it('repeated poll failures increase backoff delay', async () => {
+      const repository = makeRepository({
+        getAnprEvents: vi
+          .fn()
+          .mockResolvedValueOnce({
+            events: [{ id: 'evt-1', plateNumber: 'ABC1234' }],
+            pagination: { total: 1, page: 1, perPage: 10, lastPage: 1 }
+          })
+          .mockRejectedValueOnce(new Error('Network down'))
+          .mockRejectedValueOnce(new Error('Network down'))
+      });
+
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+      const { result } = renderHook(() => useAnprMonitoringController(repository), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(result.current.liveStatus).toBe('reconnecting');
+
+      const delays = setTimeoutSpy.mock.calls.map((call) => call[1]);
+      expect(delays.some((delay) => delay > 5000)).toBe(true);
+      setTimeoutSpy.mockRestore();
+    });
+
+    it('successful poll resets live status after failures', async () => {
+      const repository = makeRepository({
+        getAnprEvents: vi
+          .fn()
+          .mockResolvedValueOnce({
+            events: [{ id: 'evt-1', plateNumber: 'ABC1234' }],
+            pagination: { total: 1, page: 1, perPage: 10, lastPage: 1 }
+          })
+          .mockRejectedValueOnce(new Error('Network down'))
+          .mockResolvedValueOnce({
+            events: [{ id: 'evt-1', plateNumber: 'ABC1234' }],
+            pagination: { total: 1, page: 1, perPage: 10, lastPage: 1 }
+          })
+      });
+
+      const { result } = renderHook(() => useAnprMonitoringController(repository), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(result.current.liveStatus).toBe('reconnecting');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
+      expect(result.current.liveStatus).toBe('live');
+      expect(result.current.liveError).toBeNull();
+    });
+
+    it('highlights clear after duration', async () => {
+      const repository = makeRepository({
+        getAnprEvents: vi
+          .fn()
+          .mockResolvedValueOnce({
+            events: [{ id: 'evt-1', plateNumber: 'ABC1234' }],
+            pagination: { total: 1, page: 1, perPage: 10, lastPage: 1 }
+          })
+          .mockResolvedValueOnce({
+            events: [
+              { id: 'evt-2', plateNumber: 'PMK8811' },
+              { id: 'evt-1', plateNumber: 'ABC1234' }
+            ],
+            pagination: { total: 2, page: 1, perPage: 10, lastPage: 1 }
+          })
+      });
+
+      const { result } = renderHook(() => useAnprMonitoringController(repository), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(result.current.highlightedEventIds).toContain('evt-2');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4000);
+      });
+      expect(result.current.highlightedEventIds).not.toContain('evt-2');
+    });
+
     it('highlights new event IDs on poll without duplicating rows', async () => {
       const repository = makeRepository({
         getAnprEvents: vi

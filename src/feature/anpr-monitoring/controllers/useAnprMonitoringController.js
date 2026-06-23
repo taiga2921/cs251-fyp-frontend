@@ -8,6 +8,7 @@ const DEFAULT_FILTERS = {
 };
 
 const POLL_INTERVAL_MS = 5000;
+const POLL_BACKOFF_MAX_MS = 30000;
 const HIGHLIGHT_DURATION_MS = 4000;
 
 export const useAnprMonitoringController = (repository) => {
@@ -31,6 +32,7 @@ export const useAnprMonitoringController = (repository) => {
   const isMountedRef = useRef(true);
   const pollTimerRef = useRef(null);
   const inFlightRef = useRef(false);
+  const consecutivePollFailuresRef = useRef(0);
   const lastSeenEventIdsRef = useRef(new Set());
   const highlightTimersRef = useRef(new Map());
 
@@ -110,6 +112,7 @@ export const useAnprMonitoringController = (repository) => {
         setLastUpdatedAt(new Date());
         setLiveStatus('live');
         setLiveError(null);
+        consecutivePollFailuresRef.current = 0;
 
         if (!isPoll) {
           setError(null);
@@ -120,6 +123,7 @@ export const useAnprMonitoringController = (repository) => {
         const message = err.message || 'Failed to load ANPR events';
 
         if (isPoll) {
+          consecutivePollFailuresRef.current += 1;
           setLiveStatus('reconnecting');
           setLiveError(message);
         } else {
@@ -166,13 +170,18 @@ export const useAnprMonitoringController = (repository) => {
     }
 
     const schedulePoll = () => {
+      const failures = consecutivePollFailuresRef.current;
+      const delay = Math.min(
+        POLL_INTERVAL_MS * 2 ** failures,
+        POLL_BACKOFF_MAX_MS
+      );
       pollTimerRef.current = setTimeout(async () => {
         if (!isMountedRef.current || !liveEnabled) return;
         await loadEvents({ isPoll: true });
         if (isMountedRef.current && liveEnabled) {
           schedulePoll();
         }
-      }, POLL_INTERVAL_MS);
+      }, delay);
     };
 
     schedulePoll();

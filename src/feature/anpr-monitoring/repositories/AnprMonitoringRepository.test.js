@@ -90,6 +90,19 @@ describe('AnprMonitoringRepository', () => {
     expect(normalized.images.map((image) => image.imageType)).toEqual(['full', 'plate', 'annotated']);
   });
 
+  it('uses images_count when list payload omits image rows', () => {
+    const repo = new AnprMonitoringRepository({});
+    const normalized = repo.normalizeEvent({
+      id: 'evt-4',
+      plate_number: 'ABC1234',
+      confidence: 0.8,
+      images_count: 3
+    });
+    expect(normalized.evidenceCount).toBe(3);
+    expect(normalized.hasEvidence).toBe(true);
+    expect(normalized.images).toEqual([]);
+  });
+
   it('does not crash on partial backend payloads', () => {
     const repo = new AnprMonitoringRepository({});
     expect(repo.normalizeEvent(null)).toBeNull();

@@ -164,7 +164,13 @@ export class AnprMonitoringRepository {
     }, {});
 
     const confidence = parseConfidence(event.confidence);
-    const evidenceCount = images.length;
+    const imagesCountFromApi = Number(event.images_count);
+    const evidenceCount =
+      images.length > 0
+        ? images.length
+        : Number.isFinite(imagesCountFromApi)
+          ? imagesCountFromApi
+          : 0;
 
     return {
       id: event.id ?? null,
