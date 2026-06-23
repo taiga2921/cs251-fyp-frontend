@@ -1369,6 +1369,21 @@ No secrets are currently stored in `.env` or `src/`. Be careful to keep this tru
 | Utilities          | `lodash-es`, `react-device-detect`, `material-ui-popup-state`               |
 | HTTP               | Native `fetch` (wrapped in `src/api/api.js`)                                |
 
+### M14 automated tests (Vitest)
+
+M14 adds a minimal Vitest stack for ANPR monitoring and vehicle management regression coverage.
+
+| Command | Purpose |
+| ------- | ------- |
+| `yarn test` | Run Vitest once (`vitest run`) |
+| `yarn test:watch` | Watch mode |
+
+**Config:** `vitest.config.mjs` merges with `vite.config.mjs` (aliases preserved). Setup: `src/test/setupTests.js`.
+
+**M14 coverage:** `AnprMonitoringRepository`, `useAnprMonitoringController`, `AnprLiveIndicator`, `AnprEventTable`, `AnprEventSummaryCards`, `AnprEvidenceGallery`, `VehicleManagementRepository`, `VehicleEditDrawer`.
+
+Full cross-stack testing architecture: `ai-anpr-v1/docs/m14-testing-architecture.md`.
+
 ---
 
 ## 12. Build & Deployment
