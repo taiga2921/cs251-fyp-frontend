@@ -198,9 +198,9 @@ const controller = useUserController(repository);
 
 This keeps views purely presentational while controllers own state, side effects, and navigation.
 
-### Blockchain monitoring architecture (M0 — planned; M1 contract only)
+### Blockchain monitoring architecture (M0 — planned; M1 contract; M2 Laravel DB)
 
-The Blockchain Module dashboard is **not implemented** in the frontend yet (target milestone **M11**). **M1** completed the Ethereum contract and Ganache deployment artifact in `../blockchain-ethereum-v1/`; that JSON is for **Laravel backend configuration (M3+)**—the SPA must still not call Ethereum RPC or load deployment secrets.
+The Blockchain Module dashboard is **not implemented** in the frontend yet (target milestone **M11**). **M1** completed the Ethereum contract in `../blockchain-ethereum-v1/`. **M2** expanded Laravel blockchain tables/models in `backend-laravel-v1/`; the SPA still must not call Ethereum RPC or load deployment secrets.
 
 Architecture rules for when the dashboard is built:
 
@@ -227,9 +227,9 @@ src/feature/blockchain-monitoring/
 - `/admin/blockchain-monitoring` — list and summary
 - `/admin/blockchain-monitoring/:blockchainRecordId` — record detail, jobs, verifications
 
-Allowed roles (per `blockchain-module.md`): Admin (full access including retry); Security Operator (view + manual verify). Guards have no access.
+Allowed roles (per `blockchain-module.md`): Admin (full access including retry); Security Operator (view + manual verify). Guards have no access. **M2 cleanup:** backend `GET /api/blockchain-records` now enforces Admin/Security Operator via the same `AuthorizesPatrolMonitoring` helper used for patrol monitoring APIs. Frontend dashboard UI remains **M11** — no React blockchain routes or components exist yet.
 
-See: [`../blockchain-module.md`](../blockchain-module.md), [`../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md`](../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md), [`../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md`](../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md).
+See: [`../blockchain-module.md`](../blockchain-module.md), [`../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md`](../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md), [`../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md`](../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md), [`../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md`](../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md).
 
 ### Feature-Based Structure
 
