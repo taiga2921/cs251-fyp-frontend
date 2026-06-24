@@ -198,9 +198,9 @@ const controller = useUserController(repository);
 
 This keeps views purely presentational while controllers own state, side effects, and navigation.
 
-### Blockchain monitoring architecture (M0 — planned; M1 contract; M2 Laravel DB; M3 config)
+### Blockchain monitoring architecture (M0 — planned; M1 contract; M2 Laravel DB; M3 config; M4 hashing)
 
-The Blockchain Module dashboard is **not implemented** in the frontend (target milestone **M11**). **M3** added Laravel `config/blockchain.php` and `BLOCKCHAIN_*` server environment variables only—the SPA must **not** read those variables, use Web3/wallet libraries, or call Ethereum RPC. Future dashboard work must call Laravel APIs only.
+The Blockchain Module dashboard is **not implemented** in the frontend (target milestone **M11**). **M3** added Laravel `config/blockchain.php` and `BLOCKCHAIN_*` server environment variables. **M4** added backend-only deterministic hashing (`BlockchainCanonicalJson`, `BlockchainHashService`) with no frontend surface. The SPA must **not** read `BLOCKCHAIN_*` variables, use Web3/wallet libraries, call Ethereum RPC, or perform canonical hashing for anchoring.
 
 Architecture rules for when the dashboard is built:
 
@@ -229,7 +229,7 @@ src/feature/blockchain-monitoring/
 
 Allowed roles (per `blockchain-module.md`): Admin (full access including retry); Security Operator (view + manual verify). Guards have no access. **M2 cleanup:** backend `GET /api/blockchain-records` now enforces Admin/Security Operator via the same `AuthorizesPatrolMonitoring` helper used for patrol monitoring APIs. Frontend dashboard UI remains **M11** — no React blockchain routes or components exist yet.
 
-See: [`../blockchain-module.md`](../blockchain-module.md), [`../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md`](../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md), [`../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md`](../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md), [`../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md`](../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md), [`../blockchain-ethereum-v1/docs/m3-configuration-and-environment-management.md`](../blockchain-ethereum-v1/docs/m3-configuration-and-environment-management.md).
+See: [`../blockchain-module.md`](../blockchain-module.md), [`../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md`](../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md), [`../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md`](../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md), [`../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md`](../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md), [`../blockchain-ethereum-v1/docs/m3-configuration-and-environment-management.md`](../blockchain-ethereum-v1/docs/m3-configuration-and-environment-management.md), [`../blockchain-ethereum-v1/docs/m4-deterministic-hashing-architecture.md`](../blockchain-ethereum-v1/docs/m4-deterministic-hashing-architecture.md).
 
 ### Feature-Based Structure
 
