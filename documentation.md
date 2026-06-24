@@ -198,15 +198,15 @@ const controller = useUserController(repository);
 
 This keeps views purely presentational while controllers own state, side effects, and navigation.
 
-### Blockchain monitoring architecture (M0 — planned; M1 contract; M2 Laravel DB; M3 config; M4 hashing; M5 record service; M6 Ganache anchoring)
+### Blockchain monitoring architecture (M0 — planned; M1 contract; M2 Laravel DB; M3 config; M4 hashing; M5 record service; M6 Ganache anchoring; M7 retry/failure handling)
 
-The Blockchain Module dashboard is **not implemented** in the frontend (target milestone **M11**). **M6** added backend-only Ganache anchoring via `EthereumRpcClient` and `AnchorBlockchainRecordJob`. The SPA must **not** read `BLOCKCHAIN_*` variables, use Web3/wallet libraries, call Ethereum RPC, or create blockchain records directly. Future dashboard work must call Laravel APIs only.
+The Blockchain Module dashboard is **not implemented** in the frontend (target milestone **M11**). **M6** added backend-only Ganache anchoring via `EthereumRpcClient` and `AnchorBlockchainRecordJob`. **M7** added backend retry scheduling, exponential backoff, and the Admin-only manual retry API (`POST /api/blockchain-records/{id}/retry`). The SPA must **not** read `BLOCKCHAIN_*` variables, use Web3/wallet libraries, call Ethereum RPC, or create blockchain records directly. Future dashboard work must call Laravel APIs only.
 
 Architecture rules for when the dashboard is built:
 
 | Rule | Requirement |
 | --- | --- |
-| API access | Call **Laravel blockchain APIs only** (`/api/blockchain-records`, future verify/retry/dashboard endpoints)—via existing `src/api/api.js` |
+| API access | Call **Laravel blockchain APIs only** (`/api/blockchain-records`, `POST /api/blockchain-records/{id}/retry` for Admin, future verify/dashboard endpoints)—via existing `src/api/api.js` |
 | Ethereum | **No** direct Ethereum JSON-RPC, Web3, or wallet libraries in the browser |
 | Secrets | **No** private keys, mnemonics, or server wallet material in the SPA |
 | Hash authority | Canonical hashing and anchoring decisions remain **backend-only** |
@@ -227,9 +227,9 @@ src/feature/blockchain-monitoring/
 - `/admin/blockchain-monitoring` — list and summary
 - `/admin/blockchain-monitoring/:blockchainRecordId` — record detail, jobs, verifications
 
-Allowed roles (per `blockchain-module.md`): Admin (full access including retry); Security Operator (view + manual verify). Guards have no access. **M2 cleanup:** backend `GET /api/blockchain-records` now enforces Admin/Security Operator via the same `AuthorizesPatrolMonitoring` helper used for patrol monitoring APIs. Frontend dashboard UI remains **M11** — no React blockchain routes or components exist yet.
+Allowed roles (per `blockchain-module.md`): Admin (full access including retry); Security Operator (view + manual verify). Guards have no access. **M7:** backend `POST /api/blockchain-records/{id}/retry` is Admin-only; Security Operator and Guard receive **403**. Frontend dashboard UI remains **M11** — no React blockchain routes or components exist yet.
 
-See: [`../blockchain-module.md`](../blockchain-module.md), [`../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md`](../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md), [`../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md`](../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md), [`../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md`](../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md), [`../blockchain-ethereum-v1/docs/m3-configuration-and-environment-management.md`](../blockchain-ethereum-v1/docs/m3-configuration-and-environment-management.md), [`../blockchain-ethereum-v1/docs/m4-deterministic-hashing-architecture.md`](../blockchain-ethereum-v1/docs/m4-deterministic-hashing-architecture.md), [`../blockchain-ethereum-v1/docs/m5-blockchain-record-service-and-read-apis.md`](../blockchain-ethereum-v1/docs/m5-blockchain-record-service-and-read-apis.md), [`../blockchain-ethereum-v1/docs/m6-ganache-anchoring-end-to-end.md`](../blockchain-ethereum-v1/docs/m6-ganache-anchoring-end-to-end.md).
+See: [`../blockchain-module.md`](../blockchain-module.md), [`../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md`](../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md), [`../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md`](../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md), [`../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md`](../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md), [`../blockchain-ethereum-v1/docs/m3-configuration-and-environment-management.md`](../blockchain-ethereum-v1/docs/m3-configuration-and-environment-management.md), [`../blockchain-ethereum-v1/docs/m4-deterministic-hashing-architecture.md`](../blockchain-ethereum-v1/docs/m4-deterministic-hashing-architecture.md), [`../blockchain-ethereum-v1/docs/m5-blockchain-record-service-and-read-apis.md`](../blockchain-ethereum-v1/docs/m5-blockchain-record-service-and-read-apis.md), [`../blockchain-ethereum-v1/docs/m6-ganache-anchoring-end-to-end.md`](../blockchain-ethereum-v1/docs/m6-ganache-anchoring-end-to-end.md), [`../blockchain-ethereum-v1/docs/m7-retry-and-failure-handling.md`](../blockchain-ethereum-v1/docs/m7-retry-and-failure-handling.md).
 
 ### Feature-Based Structure
 
