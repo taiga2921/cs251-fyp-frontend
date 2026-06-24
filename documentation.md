@@ -198,9 +198,9 @@ const controller = useUserController(repository);
 
 This keeps views purely presentational while controllers own state, side effects, and navigation.
 
-### Blockchain monitoring architecture (M0 — planned; M1 contract; M2 Laravel DB; M3 config; M4 hashing; M5 record service; M6 Ganache anchoring; M7 retry/failure handling; M8 verification)
+### Blockchain monitoring architecture (M0 — planned; M1 contract; M2 Laravel DB; M3 config; M4 hashing; M5 record service; M6 Ganache anchoring; M7 retry/failure handling; M8 verification; M9 Sepolia deployment)
 
-The Blockchain Module dashboard is **not implemented** in the frontend (target milestone **M11**). **M8** added backend verification via `BlockchainVerificationService` and `POST /api/blockchain-records/{id}/verify` (Admin + Security Operator). **M7** added backend retry scheduling and Admin-only manual retry. The SPA must **not** read `BLOCKCHAIN_*` variables, use Web3/wallet libraries, call Ethereum RPC, or create blockchain records directly. Future dashboard work must call Laravel APIs only.
+The Blockchain Module dashboard is **not implemented** in the frontend (target milestone **M11**). **M9** added Sepolia deployment and Laravel signed anchoring in the backend only — no React changes. **M8** added backend verification via `BlockchainVerificationService` and `POST /api/blockchain-records/{id}/verify` (Admin + Security Operator). **M7** added backend retry scheduling and Admin-only manual retry. The SPA must **not** read `BLOCKCHAIN_*` variables, use Web3/wallet libraries, call Ethereum RPC, or create blockchain records directly. Future dashboard work must call Laravel APIs only.
 
 Architecture rules for when the dashboard is built:
 
