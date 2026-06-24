@@ -198,6 +198,37 @@ const controller = useUserController(repository);
 
 This keeps views purely presentational while controllers own state, side effects, and navigation.
 
+### Blockchain monitoring architecture (M0 — planned)
+
+The Blockchain Module dashboard is **not implemented** in the frontend yet (target milestone **M11**). Architecture rules for when it is built:
+
+| Rule | Requirement |
+| --- | --- |
+| API access | Call **Laravel blockchain APIs only** (`/api/blockchain-records`, future verify/retry/dashboard endpoints)—via existing `src/api/api.js` |
+| Ethereum | **No** direct Ethereum JSON-RPC, Web3, or wallet libraries in the browser |
+| Secrets | **No** private keys, mnemonics, or server wallet material in the SPA |
+| Hash authority | Canonical hashing and anchoring decisions remain **backend-only** |
+
+**Planned feature layout** (mirror `feature/anpr-monitoring`):
+
+```text
+src/feature/blockchain-monitoring/
+├── components/
+├── controllers/
+├── datasources/
+├── repositories/
+└── views/
+```
+
+**Planned routes:**
+
+- `/admin/blockchain-monitoring` — list and summary
+- `/admin/blockchain-monitoring/:blockchainRecordId` — record detail, jobs, verifications
+
+Allowed roles (per `blockchain-module.md`): Admin (full access including retry); Security Operator (view + manual verify). Guards have no access.
+
+See: [`../blockchain-module.md`](../blockchain-module.md), [`../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md`](../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md).
+
 ### Feature-Based Structure
 
 `src/feature/` contains one folder per business domain. `management-user` is the most complete module; `management-zone` now has active data/service wiring; `feature/authentication` provides logout (service/repository/controller); `management-checkpoint` is fully implemented (Milestone 8); `management-camera` remains partial.
@@ -1593,6 +1624,7 @@ Suggestions that are actionable given the current implementation.
 - **Implement Register**: convert `AuthRegister.jsx` from a static form into a controlled form that calls the backend register endpoint.
 - ~~**Implement Checkpoint module**~~ — done (Milestone 8): `feature/management-checkpoint` with map picker and full CRUD.
 - **Implement Camera module** under `feature/management-camera`. Mirror the user-management pattern (views → controllers → repository → service).
+- **Implement Blockchain monitoring** under `feature/blockchain-monitoring` (M11): Laravel API only; routes `/admin/blockchain-monitoring` and `/admin/blockchain-monitoring/:blockchainRecordId`; no direct Ethereum RPC.
 - **Show authenticated user info** in the header (currently hard-coded "Johne Doe" in `ProfileSection`). The token already saves a user object under `auth_user`.
 
 ### Refactoring Opportunities
