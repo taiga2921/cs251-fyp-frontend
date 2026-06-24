@@ -198,9 +198,11 @@ const controller = useUserController(repository);
 
 This keeps views purely presentational while controllers own state, side effects, and navigation.
 
-### Blockchain monitoring architecture (M0 — planned)
+### Blockchain monitoring architecture (M0 — planned; M1 contract only)
 
-The Blockchain Module dashboard is **not implemented** in the frontend yet (target milestone **M11**). Architecture rules for when it is built:
+The Blockchain Module dashboard is **not implemented** in the frontend yet (target milestone **M11**). **M1** completed the Ethereum contract and Ganache deployment artifact in `../blockchain-ethereum-v1/`; that JSON is for **Laravel backend configuration (M3+)**—the SPA must still not call Ethereum RPC or load deployment secrets.
+
+Architecture rules for when the dashboard is built:
 
 | Rule | Requirement |
 | --- | --- |
@@ -227,7 +229,7 @@ src/feature/blockchain-monitoring/
 
 Allowed roles (per `blockchain-module.md`): Admin (full access including retry); Security Operator (view + manual verify). Guards have no access.
 
-See: [`../blockchain-module.md`](../blockchain-module.md), [`../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md`](../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md).
+See: [`../blockchain-module.md`](../blockchain-module.md), [`../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md`](../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md), [`../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md`](../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md).
 
 ### Feature-Based Structure
 
