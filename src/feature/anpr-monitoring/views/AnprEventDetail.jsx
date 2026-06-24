@@ -9,6 +9,7 @@ import { AnprMonitoringRepository } from '../repositories/AnprMonitoringReposito
 import { useAnprEventDetailController } from '../controllers/useAnprMonitoringController';
 import AnprEventSummaryCards from '../components/AnprEventSummaryCards';
 import AnprEvidenceGallery from '../components/AnprEvidenceGallery';
+import AnprBlockchainProofSection from '../components/AnprBlockchainProofSection';
 import AnprStatusChip from '../components/AnprStatusChip';
 
 export default function AnprEventDetail() {
@@ -70,6 +71,10 @@ export default function AnprEventDetail() {
         </Stack>
 
         <AnprEventSummaryCards event={event} />
+        <AnprBlockchainProofSection
+          eventProof={event.blockchainProof}
+          imageProofSummary={event.imageBlockchainProofSummary}
+        />
         <AnprEvidenceGallery images={event.images} imageMap={event.imageMap} />
       </Stack>
     </MainCard>

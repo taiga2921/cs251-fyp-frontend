@@ -112,4 +112,42 @@ describe('AnprMonitoringRepository', () => {
       hasEvidence: false
     });
   });
+
+  it('normalizes blockchain proof fields on event detail payloads', () => {
+    const repo = new AnprMonitoringRepository({});
+    const normalized = repo.normalizeEvent({
+      id: 'evt-5',
+      plate_number: 'ABC1234',
+      confidence: 0.8,
+      blockchain_proof: {
+        id: 'proof-1',
+        entity_type: 'anpr_event',
+        proof_type: 'entity_created',
+        network: 'ganache',
+        environment: 'local',
+        status: 'confirmed',
+        tx_hash: '0xabc123def456',
+        confirmations: 3,
+        submitted_at: '2026-06-21T10:00:00Z',
+        confirmed_at: '2026-06-21T10:05:00Z'
+      },
+      image_blockchain_proof_summary: {
+        count: 2,
+        confirmed_count: 1,
+        statuses: ['confirmed', 'queued']
+      }
+    });
+
+    expect(normalized.blockchainProof).toMatchObject({
+      id: 'proof-1',
+      status: 'confirmed',
+      txHash: '0xabc123def456',
+      network: 'ganache'
+    });
+    expect(normalized.imageBlockchainProofSummary).toEqual({
+      count: 2,
+      confirmedCount: 1,
+      statuses: ['confirmed', 'queued']
+    });
+  });
 });

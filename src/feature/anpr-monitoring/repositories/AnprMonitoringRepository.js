@@ -59,6 +59,35 @@ const normalizeVehicle = (vehicle) => {
   };
 };
 
+const normalizeBlockchainProof = (proof) => {
+  if (!proof || typeof proof !== 'object') return null;
+
+  return {
+    id: proof.id ?? null,
+    entityType: proof.entity_type ?? null,
+    proofType: proof.proof_type ?? null,
+    network: proof.network ?? null,
+    environment: proof.environment ?? null,
+    status: proof.status ?? null,
+    txHash: proof.tx_hash ?? null,
+    blockNumber: proof.block_number ?? null,
+    confirmations: proof.confirmations ?? null,
+    submittedAt: proof.submitted_at ?? null,
+    confirmedAt: proof.confirmed_at ?? null,
+    lastError: proof.last_error ?? null
+  };
+};
+
+const normalizeImageBlockchainProofSummary = (summary) => {
+  if (!summary || typeof summary !== 'object') return null;
+
+  return {
+    count: Number(summary.count ?? 0),
+    confirmedCount: Number(summary.confirmed_count ?? 0),
+    statuses: Array.isArray(summary.statuses) ? summary.statuses.map(String) : []
+  };
+};
+
 const normalizeImage = (image) => {
   if (!image || typeof image !== 'object') return null;
 
@@ -73,7 +102,8 @@ const normalizeImage = (image) => {
     fileSize: image.file_size ?? null,
     resolution: image.resolution ?? null,
     expiresAt: image.expires_at ?? null,
-    previewUrl
+    previewUrl,
+    blockchainProof: normalizeBlockchainProof(image.blockchain_proof)
   };
 };
 
@@ -188,7 +218,9 @@ export class AnprMonitoringRepository {
       images,
       imageMap,
       evidenceCount,
-      hasEvidence: evidenceCount > 0
+      hasEvidence: evidenceCount > 0,
+      blockchainProof: normalizeBlockchainProof(event.blockchain_proof),
+      imageBlockchainProofSummary: normalizeImageBlockchainProofSummary(event.image_blockchain_proof_summary)
     };
   }
 }

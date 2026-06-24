@@ -16,6 +16,16 @@ const EVIDENCE_CONFIG = {
   missing: { label: 'No evidence', color: 'default' }
 };
 
+const BLOCKCHAIN_CONFIG = {
+  pending: { label: 'Pending', color: 'default' },
+  queued: { label: 'Queued', color: 'info' },
+  processing: { label: 'Processing', color: 'info' },
+  submitted: { label: 'Submitted', color: 'warning' },
+  confirmed: { label: 'Confirmed', color: 'success' },
+  failed: { label: 'Failed', color: 'error' },
+  unknown: { label: 'Unknown', color: 'default' }
+};
+
 function resolveConfig(kind, value) {
   const key = String(value ?? '').toLowerCase();
 
@@ -28,6 +38,9 @@ function resolveConfig(kind, value) {
   if (kind === 'evidence') {
     return EVIDENCE_CONFIG[key] ?? { label: value || '—', color: 'default' };
   }
+  if (kind === 'blockchain') {
+    return BLOCKCHAIN_CONFIG[key] ?? { label: value || 'Unknown', color: 'default' };
+  }
 
   return { label: value || '—', color: 'default' };
 }
@@ -38,7 +51,7 @@ export default function AnprStatusChip({ kind = 'validity', value, size = 'small
 }
 
 AnprStatusChip.propTypes = {
-  kind: PropTypes.oneOf(['validity', 'flagged', 'evidence']),
+  kind: PropTypes.oneOf(['validity', 'flagged', 'evidence', 'blockchain']),
   value: PropTypes.string,
   size: PropTypes.oneOf(['small', 'medium'])
 };
