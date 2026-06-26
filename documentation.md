@@ -60,6 +60,7 @@ The frontend currently provides:
 | Patrol Home (`/patrol`)    | **Implemented (functional)**         | `feature/patrol` — **all roles** (Admin, Security Operator, Guard); Laravel **`patrol_sessions.id`** is end-to-end **`patrolId`** (Dexie **`location_logs.patrolId`** and **`POST /pwa/sync`** payload **`patrolId`** match); checkpoints via **`checkpoint-events`**; route crumbs via **`POST /patrol-routes`**; GPS via **`usePatrolController`** + **`services/geolocationService`**; **`PatrolPwaStatusPanel`**. See [Section 15](#15-progressive-web-app-pwa). |
 | Patrol Monitoring          | **Implemented**                      | `feature/patrol-monitoring` — **Admin + Security Operator only**; dashboard + session detail at **`/admin/patrol-monitoring`**; sidebar item under **Operator** group with **`IconMapPin2`**; lists patrol sessions, summaries, checkpoint events, **route map** (Leaflet CDN) with **suspicious segment overlays** (Milestone 10) and **patrol replay** (Milestone 11); **live updates** via Laravel Reverb + Echo (30s polling fallback) with the same blinking red dot live indicator as ANPR Monitoring; **Re-run Validation** calls backend **`POST …/validate`**. |
 | ANPR Monitoring            | **Implemented**                      | `feature/anpr-monitoring` — **Admin + Security Operator only**; list + detail at **`/admin/anpr-monitoring`**; sidebar **ANPR Monitoring** (`IconCar`); server-side filters via **`GET /anpr-events`**; evidence gallery with protected file previews; **M10 blockchain** lightweight proof section on event detail (status, tx hash, network, image proof summary — Laravel API only, no Web3); **M12** live polling (5s) with blinking red dot indicator (tooltip only), new-row highlight, manual refresh preserved; **M13** linked vehicle section on event detail with admin navigation to vehicle management; **M15** exponential backoff on repeated poll failures (max 30s), list evidence badges use `images_count` when image rows are omitted. |
+| Blockchain Monitoring      | **Implemented**                      | **M11** — `feature/blockchain-monitoring`; **`/admin/blockchain-monitoring`** (+ record detail); Admin + Security Operator; summary cards, filters, table, verify/retry/refresh via Laravel blockchain APIs only; no Web3. |
 | PWA offline / sync         | **Implemented (core)**               | IndexedDB + sync queue + global **`NetworkSnackbar`**; **`POST /api/pwa/sync`** (**JWT**) drains **`location_log`** rows idempotently. **Background Sync** registers tag **`pwa-sync-queue`** when the queue has work; SW **`sync`** posts **`PWA_SYNC_REQUEST`** to clients → **`flushSyncQueue`**. **Retry Sync** + auto-flush on **`online`** remain when Background Sync is unavailable.                                       |
 | Web Push (PWA)             | **Implemented**                      | Subscribe/unsubscribe + **outbound** patrol alerts from Laravel (`WebPushNotificationService`). **`PatrolPwaStatusPanel`**: permission/subscription state, **Send Test Notification** (`POST /push-notifications/test` — `success: true` only when at least one device receives the push; `data` includes delivery counts). Reverb realtime remains separate.                                                                      |
 | Theme Customization        | Implemented                          | Font family + border radius drawer (toggle button itself is currently commented out).                                                                                                                                                                                                                                                                                                                                              |
@@ -198,38 +199,20 @@ const controller = useUserController(repository);
 
 This keeps views purely presentational while controllers own state, side effects, and navigation.
 
-### Blockchain monitoring architecture (M0 — planned; M1 contract; M2 Laravel DB; M3 config; M4 hashing; M5 record service; M6 Ganache anchoring; M7 retry/failure handling; M8 verification; M9 Sepolia deployment)
+### Blockchain monitoring architecture (M11 — implemented)
 
-The Blockchain Module dashboard is **not implemented** in the frontend (target milestone **M11**). **M9** added Sepolia deployment and Laravel signed anchoring in the backend only — no React changes. **M8** added backend verification via `BlockchainVerificationService` and `POST /api/blockchain-records/{id}/verify` (Admin + Security Operator). **M7** added backend retry scheduling and Admin-only manual retry. The SPA must **not** read `BLOCKCHAIN_*` variables, use Web3/wallet libraries, call Ethereum RPC, or create blockchain records directly. Future dashboard work must call Laravel APIs only.
+**M11** implements the blockchain monitoring dashboard at **`/admin/blockchain-monitoring`** for **Admin** and **Security Operator** only. Module: `feature/blockchain-monitoring` (view → controller → repository → `blockchainMonitoringService`). Uses Laravel APIs only — **no** Web3, wallet libraries, or browser Ethereum RPC.
 
-Architecture rules for when the dashboard is built:
-
-| Rule | Requirement |
+| Route | Purpose |
 | --- | --- |
-| API access | Call **Laravel blockchain APIs only** (`/api/blockchain-records`, `POST /api/blockchain-records/{id}/verify`, `POST /api/blockchain-records/{id}/retry` for Admin, future dashboard endpoints)—via existing `src/api/api.js` |
-| Ethereum | **No** direct Ethereum JSON-RPC, Web3, or wallet libraries in the browser |
-| Secrets | **No** private keys, mnemonics, or server wallet material in the SPA |
-| Hash authority | Canonical hashing and anchoring decisions remain **backend-only** |
+| `/admin/blockchain-monitoring` | Summary cards, filters, paginated record table |
+| `/admin/blockchain-monitoring/:blockchainRecordId` | Detail, jobs, verifications, verify/retry/refresh |
 
-**Planned feature layout** (mirror `feature/anpr-monitoring`):
+Sidebar: Operator → **Blockchain Monitoring** (`IconShieldCheck`). Guard cannot access routes.
 
-```text
-src/feature/blockchain-monitoring/
-├── components/
-├── controllers/
-├── datasources/
-├── repositories/
-└── views/
-```
+APIs: `GET /api/blockchain-records`, `GET /api/blockchain-records/summary`, `GET /api/blockchain-records/{id}`, `POST .../verify`, `POST .../retry` (Admin only), `POST .../refresh` (submitted + tx hash).
 
-**Planned routes:**
-
-- `/admin/blockchain-monitoring` — list and summary
-- `/admin/blockchain-monitoring/:blockchainRecordId` — record detail, jobs, verifications
-
-Allowed roles (per `blockchain-module.md`): Admin (full access including retry); Security Operator (view + manual verify via M8 verify API). Guards have no access. **M8:** `POST /api/blockchain-records/{id}/verify` is available to Admin and Security Operator; **M7** retry remains Admin-only. Frontend dashboard UI remains **M11** — no React blockchain routes or components exist yet.
-
-See: [`../blockchain-module.md`](../blockchain-module.md), [`../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md`](../blockchain-ethereum-v1/docs/m0-architecture-finalization-and-repository-split.md), [`../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md`](../blockchain-ethereum-v1/docs/m1-ethereum-project-foundation.md), [`../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md`](../blockchain-ethereum-v1/docs/m2-laravel-database-foundation.md), [`../blockchain-ethereum-v1/docs/m3-configuration-and-environment-management.md`](../blockchain-ethereum-v1/docs/m3-configuration-and-environment-management.md), [`../blockchain-ethereum-v1/docs/m4-deterministic-hashing-architecture.md`](../blockchain-ethereum-v1/docs/m4-deterministic-hashing-architecture.md), [`../blockchain-ethereum-v1/docs/m5-blockchain-record-service-and-read-apis.md`](../blockchain-ethereum-v1/docs/m5-blockchain-record-service-and-read-apis.md), [`../blockchain-ethereum-v1/docs/m6-ganache-anchoring-end-to-end.md`](../blockchain-ethereum-v1/docs/m6-ganache-anchoring-end-to-end.md), [`../blockchain-ethereum-v1/docs/m7-retry-and-failure-handling.md`](../blockchain-ethereum-v1/docs/m7-retry-and-failure-handling.md), [`../blockchain-ethereum-v1/docs/m8-verification-system.md`](../blockchain-ethereum-v1/docs/m8-verification-system.md).
+See: [`../blockchain-ethereum-v1/docs/m11-blockchain-monitoring-frontend.md`](../blockchain-ethereum-v1/docs/m11-blockchain-monitoring-frontend.md).
 
 ### Feature-Based Structure
 
@@ -1626,7 +1609,7 @@ Suggestions that are actionable given the current implementation.
 - **Implement Register**: convert `AuthRegister.jsx` from a static form into a controlled form that calls the backend register endpoint.
 - ~~**Implement Checkpoint module**~~ — done (Milestone 8): `feature/management-checkpoint` with map picker and full CRUD.
 - **Implement Camera module** under `feature/management-camera`. Mirror the user-management pattern (views → controllers → repository → service). Re-enable the Admin sidebar item and register `/admin/management-camera` in `MainRoutes.jsx` when the page ships.
-- **Implement Blockchain monitoring** under `feature/blockchain-monitoring` (M11): Laravel API only; routes `/admin/blockchain-monitoring` and `/admin/blockchain-monitoring/:blockchainRecordId`; no direct Ethereum RPC.
+- **Blockchain monitoring (M11):** Implemented under `feature/blockchain-monitoring`; Laravel API only; routes `/admin/blockchain-monitoring` and `/admin/blockchain-monitoring/:blockchainRecordId`.
 - **Show authenticated user info** in the header (currently hard-coded "Johne Doe" in `ProfileSection`). The token already saves a user object under `auth_user`.
 
 ### Refactoring Opportunities
