@@ -60,12 +60,12 @@ const admin = {
         //   type: 'item',
         //   url: '/admin/management-checkpoint'
         // },
-        {
-          id: 'admin-camera-management',
-          title: 'Camera',
-          type: 'item',
-          url: '/admin/management-camera'
-        },
+        // {
+        //   id: 'admin-camera-management',
+        //   title: 'Camera',
+        //   type: 'item',
+        //   url: '/admin/management-camera'
+        // },
         {
           id: 'admin-vehicle-management',
           title: 'Vehicle',

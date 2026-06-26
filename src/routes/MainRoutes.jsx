@@ -82,10 +82,6 @@ const MainRoutes = {
       path: 'dashboard',
       element: adminOnly(<DashboardDefault />)
     },
-    {
-      path: 'dashboard',
-      element: adminOnly(<DashboardDefault />)
-    },
 
     // ----------------- GUARD ROUTES ----------------- //
 
