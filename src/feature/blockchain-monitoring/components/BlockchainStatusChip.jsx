@@ -1,43 +1,49 @@
 import PropTypes from 'prop-types';
 import { Chip } from '@mui/material';
 
-const STATUS_CONFIG = {
+const RECORD_STATUS_CONFIG = {
   pending: { label: 'Pending', color: 'default' },
   queued: { label: 'Queued', color: 'info' },
   processing: { label: 'Processing', color: 'info' },
   submitted: { label: 'Submitted', color: 'warning' },
   confirmed: { label: 'Confirmed', color: 'success' },
-  failed: { label: 'Failed', color: 'error' },
-  unknown: { label: 'Unknown', color: 'default' }
+  failed: { label: 'Failed', color: 'error' }
 };
 
 const JOB_STATUS_CONFIG = {
-  pending: { label: 'Pending', color: 'default' },
-  running: { label: 'Running', color: 'info' },
-  successful: { label: 'Successful', color: 'success' },
+  queued: { label: 'Queued', color: 'info' },
+  processing: { label: 'Processing', color: 'info' },
+  success: { label: 'Success', color: 'success' },
   failed: { label: 'Failed', color: 'error' },
-  unknown: { label: 'Unknown', color: 'default' }
+  cancelled: { label: 'Cancelled', color: 'default' }
 };
 
 const VERIFICATION_RESULT_CONFIG = {
   valid: { label: 'Valid', color: 'success' },
-  invalid: { label: 'Invalid', color: 'error' },
-  error: { label: 'Error', color: 'warning' },
+  tampered: { label: 'Tampered', color: 'error' },
   pending: { label: 'Pending', color: 'default' },
-  unknown: { label: 'Unknown', color: 'default' }
+  failed: { label: 'Failed', color: 'error' },
+  onchain_missing: { label: 'On-chain Missing', color: 'warning' }
+};
+
+const formatFallbackLabel = (value) => {
+  if (value === null || value === undefined || value === '') return 'Unknown';
+  return String(value)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
 function resolveConfig(kind, value) {
   const key = String(value ?? '').toLowerCase();
 
   if (kind === 'job') {
-    return JOB_STATUS_CONFIG[key] ?? { label: value || '—', color: 'default' };
+    return JOB_STATUS_CONFIG[key] ?? { label: formatFallbackLabel(value), color: 'default' };
   }
   if (kind === 'verification') {
-    return VERIFICATION_RESULT_CONFIG[key] ?? { label: value || '—', color: 'default' };
+    return VERIFICATION_RESULT_CONFIG[key] ?? { label: formatFallbackLabel(value), color: 'default' };
   }
 
-  return STATUS_CONFIG[key] ?? { label: value || 'Unknown', color: 'default' };
+  return RECORD_STATUS_CONFIG[key] ?? { label: formatFallbackLabel(value), color: 'default' };
 }
 
 export default function BlockchainStatusChip({ kind = 'record', value, size = 'small' }) {

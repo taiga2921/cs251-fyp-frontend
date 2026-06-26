@@ -11,6 +11,30 @@ describe('Blockchain monitoring components', () => {
     expect(screen.getByText('Confirmed')).toBeInTheDocument();
   });
 
+  it('renders backend job status labels', () => {
+    render(<BlockchainStatusChip kind="job" value="success" />);
+    expect(screen.getByText('Success')).toBeInTheDocument();
+
+    render(<BlockchainStatusChip kind="job" value="cancelled" />);
+    expect(screen.getByText('Cancelled')).toBeInTheDocument();
+  });
+
+  it('renders backend verification result labels', () => {
+    render(<BlockchainStatusChip kind="verification" value="tampered" />);
+    expect(screen.getByText('Tampered')).toBeInTheDocument();
+
+    render(<BlockchainStatusChip kind="verification" value="onchain_missing" />);
+    expect(screen.getByText('On-chain Missing')).toBeInTheDocument();
+
+    render(<BlockchainStatusChip kind="verification" value="failed" />);
+    expect(screen.getAllByText('Failed').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders unknown status values safely', () => {
+    render(<BlockchainStatusChip kind="job" value="custom_state" />);
+    expect(screen.getByText('Custom State')).toBeInTheDocument();
+  });
+
   it('renders network badge with environment', () => {
     render(<BlockchainNetworkBadge network="sepolia" environment="staging" />);
     expect(screen.getByText('sepolia · staging')).toBeInTheDocument();

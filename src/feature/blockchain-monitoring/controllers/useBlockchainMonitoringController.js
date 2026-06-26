@@ -23,7 +23,6 @@ export const useBlockchainMonitoringController = (repository) => {
   const [error, setError] = useState(null);
 
   const isMountedRef = useRef(true);
-  const inFlightRef = useRef(false);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
@@ -35,11 +34,8 @@ export const useBlockchainMonitoringController = (repository) => {
 
   const loadData = useCallback(
     async ({ isRefresh = false } = {}) => {
-      if (inFlightRef.current) return;
-
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
-      inFlightRef.current = true;
 
       try {
         if (isRefresh) {
@@ -71,11 +67,9 @@ export const useBlockchainMonitoringController = (repository) => {
         setRecords([]);
         setPagination({ total: 0, page: 1, perPage: rowsPerPage, lastPage: 1 });
       } finally {
-        if (isMountedRef.current && requestId === requestIdRef.current) {
-          inFlightRef.current = false;
-          setLoading(false);
-          setRefreshing(false);
-        }
+        if (!isMountedRef.current || requestId !== requestIdRef.current) return;
+        setLoading(false);
+        setRefreshing(false);
       }
     },
     [repository, filters, page, rowsPerPage]

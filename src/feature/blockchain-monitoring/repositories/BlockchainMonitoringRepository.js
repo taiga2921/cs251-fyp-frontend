@@ -16,11 +16,29 @@ const STATUS_LABELS = {
   failed: 'Failed'
 };
 
+const JOB_STATUS_LABELS = {
+  queued: 'Queued',
+  processing: 'Processing',
+  success: 'Success',
+  failed: 'Failed',
+  cancelled: 'Cancelled'
+};
+
 const VERIFICATION_RESULT_LABELS = {
   valid: 'Valid',
-  invalid: 'Invalid',
-  error: 'Error',
-  pending: 'Pending'
+  tampered: 'Tampered',
+  pending: 'Pending',
+  failed: 'Failed',
+  onchain_missing: 'On-chain Missing'
+};
+
+export const formatStatusLabel = (value, labelMap) => {
+  if (value === null || value === undefined || value === '') return 'Unknown';
+  const key = String(value).toLowerCase();
+  if (labelMap[key]) return labelMap[key];
+  return String(value)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
 export const shortHash = (value, prefixLength = 8, suffixLength = 6) => {
@@ -63,7 +81,7 @@ const normalizeJob = (job) => {
     blockchainRecordId: job.blockchain_record_id ?? null,
     jobType: job.job_type ?? '—',
     status: job.status ?? 'unknown',
-    statusLabel: STATUS_LABELS[job.status] ?? job.status ?? 'Unknown',
+    statusLabel: formatStatusLabel(job.status, JOB_STATUS_LABELS),
     attempts: Number(job.attempts ?? 0),
     maxAttempts: Number(job.max_attempts ?? 0),
     nextAttemptAt: job.next_attempt_at ?? null,
@@ -101,7 +119,7 @@ const normalizeVerification = (verification) => {
     onchainHashShort: shortHash(verification.onchain_hash),
     onchainFound: Boolean(verification.onchain_found),
     result,
-    resultLabel: VERIFICATION_RESULT_LABELS[result] ?? result,
+    resultLabel: formatStatusLabel(result, VERIFICATION_RESULT_LABELS),
     errorMessage: verification.error_message ?? null,
     verifiedAt: verification.verified_at ?? null,
     createdAt: verification.created_at ?? null,
@@ -313,7 +331,7 @@ export class BlockchainMonitoringRepository {
       blockNumber: record.block_number ?? null,
       confirmations: record.confirmations ?? null,
       status,
-      statusLabel: STATUS_LABELS[status] ?? status,
+      statusLabel: formatStatusLabel(status, STATUS_LABELS),
       retryCount: Number(record.retry_count ?? 0),
       lastError: record.last_error ?? null,
       submittedAt: record.submitted_at ?? null,

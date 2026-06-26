@@ -4,6 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { useBlockchainMonitoringController } from './useBlockchainMonitoringController';
 
+const defaultPagination = { total: 1, page: 1, perPage: 10, lastPage: 1 };
+
 const makeRepository = (overrides = {}) => ({
   buildListQueryParams: vi.fn(() => ({ page: 1, per_page: 10, sort_by: 'created_at', sort_order: 'desc' })),
   getBlockchainSummary: vi.fn().mockResolvedValue({
@@ -18,7 +20,7 @@ const makeRepository = (overrides = {}) => ({
   }),
   getBlockchainRecords: vi.fn().mockResolvedValue({
     records: [{ id: 'rec-1', status: 'confirmed' }],
-    pagination: { total: 1, page: 1, perPage: 10, lastPage: 1 }
+    pagination: defaultPagination
   }),
   ...overrides
 });
@@ -37,7 +39,7 @@ describe('useBlockchainMonitoringController', () => {
     expect(repository.getBlockchainRecords).toHaveBeenCalled();
   });
 
-  it('manual refresh reloads data', async () => {
+  it('manual refresh reloads summary and records', async () => {
     const repository = makeRepository();
     const { result } = renderHook(() => useBlockchainMonitoringController(repository), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -51,16 +53,82 @@ describe('useBlockchainMonitoringController', () => {
     expect(repository.getBlockchainRecords).toHaveBeenCalledTimes(2);
   });
 
-  it('updates filters and resets page', async () => {
-    const repository = makeRepository();
+  it('changing a filter while the first request is unresolved eventually loads the latest filter', async () => {
+    const resolvers = [];
+    const repository = makeRepository({
+      buildListQueryParams: vi.fn((filters) => ({
+        page: 1,
+        per_page: 10,
+        status: filters.status === 'all' ? undefined : filters.status
+      })),
+      getBlockchainRecords: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolvers.push(resolve);
+          })
+      )
+    });
+
     const { result } = renderHook(() => useBlockchainMonitoringController(repository), { wrapper });
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(resolvers).toHaveLength(1));
 
     act(() => {
       result.current.handleStatusFilterChange('failed');
     });
 
-    await waitFor(() => expect(result.current.filters.status).toBe('failed'));
-    expect(result.current.page).toBe(0);
+    await waitFor(() => expect(resolvers).toHaveLength(2));
+    expect(repository.buildListQueryParams).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'failed' }),
+      0,
+      10
+    );
+
+    await act(async () => {
+      resolvers[1]({
+        records: [{ id: 'rec-failed', status: 'failed' }],
+        pagination: defaultPagination
+      });
+    });
+
+    await waitFor(() => expect(result.current.records[0]?.id).toBe('rec-failed'));
+    expect(result.current.filters.status).toBe('failed');
+  });
+
+  it('stale first response does not overwrite the later response', async () => {
+    const resolvers = [];
+    const repository = makeRepository({
+      getBlockchainRecords: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolvers.push(resolve);
+          })
+      )
+    });
+
+    const { result } = renderHook(() => useBlockchainMonitoringController(repository), { wrapper });
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+
+    act(() => {
+      result.current.handleStatusFilterChange('failed');
+    });
+    await waitFor(() => expect(resolvers).toHaveLength(2));
+
+    await act(async () => {
+      resolvers[1]({
+        records: [{ id: 'rec-latest', status: 'failed' }],
+        pagination: { total: 1, page: 1, perPage: 10, lastPage: 1 }
+      });
+    });
+    await waitFor(() => expect(result.current.records[0]?.id).toBe('rec-latest'));
+
+    await act(async () => {
+      resolvers[0]({
+        records: [{ id: 'rec-stale', status: 'confirmed' }],
+        pagination: { total: 99, page: 1, perPage: 10, lastPage: 1 }
+      });
+    });
+
+    expect(result.current.records[0]?.id).toBe('rec-latest');
+    expect(result.current.pagination.total).toBe(1);
   });
 });

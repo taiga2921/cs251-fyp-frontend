@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   BlockchainMonitoringRepository,
   buildSepoliaExplorerUrl,
+  formatStatusLabel,
   shortHash
 } from '../repositories/BlockchainMonitoringRepository';
 
@@ -16,6 +17,14 @@ describe('BlockchainMonitoringRepository helpers', () => {
     expect(buildSepoliaExplorerUrl('ganache', '0xabc')).toBeNull();
     expect(buildSepoliaExplorerUrl('sepolia', '0xabc')).toBe('https://sepolia.etherscan.io/tx/0xabc');
     expect(buildSepoliaExplorerUrl('sepolia', '')).toBeNull();
+  });
+
+  it('formats backend job and verification status labels', () => {
+    expect(formatStatusLabel('success', { success: 'Success' })).toBe('Success');
+    expect(formatStatusLabel('cancelled', { cancelled: 'Cancelled' })).toBe('Cancelled');
+    expect(formatStatusLabel('tampered', { tampered: 'Tampered' })).toBe('Tampered');
+    expect(formatStatusLabel('onchain_missing', { onchain_missing: 'On-chain Missing' })).toBe('On-chain Missing');
+    expect(formatStatusLabel('custom_state', {})).toBe('Custom State');
   });
 });
 
@@ -130,18 +139,34 @@ describe('BlockchainMonitoringRepository', () => {
       status: 'submitted',
       network: 'sepolia',
       tx_hash: '0xfeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface',
-      jobs: [{ id: 'job-1', job_type: 'anchor', status: 'failed', attempts: 2, max_attempts: 3 }],
+      jobs: [
+        { id: 'job-1', job_type: 'anchor', status: 'success', attempts: 2, max_attempts: 3 },
+        { id: 'job-2', job_type: 'verify', status: 'cancelled', attempts: 1, max_attempts: 1 }
+      ],
       verifications: [
         {
           id: 'ver-1',
           result: 'valid',
           stored_hash: '0xabc',
           verified_by_user: { id: 'u1', name: 'Admin User' }
+        },
+        {
+          id: 'ver-2',
+          result: 'tampered',
+          stored_hash: '0xdef'
+        },
+        {
+          id: 'ver-3',
+          result: 'onchain_missing',
+          stored_hash: '0xghi'
         }
       ]
     });
-    expect(record.jobs[0].jobType).toBe('anchor');
+    expect(record.jobs[0].statusLabel).toBe('Success');
+    expect(record.jobs[1].statusLabel).toBe('Cancelled');
     expect(record.latestVerification.resultLabel).toBe('Valid');
+    expect(record.verifications[1].resultLabel).toBe('Tampered');
+    expect(record.verifications[2].resultLabel).toBe('On-chain Missing');
     expect(record.explorerUrl).toContain('sepolia.etherscan.io');
     expect(record.canRefreshConfirmation).toBe(true);
   });
