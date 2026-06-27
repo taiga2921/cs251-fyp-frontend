@@ -33,7 +33,7 @@ This document is the primary technical reference for the **`frontend-react-v1`**
 The frontend currently provides:
 
 - A **JWT-protected dashboard layout** (header, sidebar, breadcrumbs, footer, theme customization).
-- A **login flow** that calls the Laravel backend (`POST /auth/login`, with legacy fallback to `POST /login` on 404) and stores `access_token` in `localStorage`.
+- A **login flow** that calls the Laravel backend (`POST /auth/login`, with legacy fallback to `POST /login` on 404). Normal login persists the JWT via `utils/auth.js` (in-memory cache with `localStorage` fallback for route guards). **M4:** setup-required login does not persist `access_token` or `auth_user`; the setup token is passed through React Router state only.
 - A **route-guarded** structure that separates protected app routes (`MainRoutes`) from guest-only routes (`AuthenticationRoutes`).
 - A **User Management module** under `feature/management-user` that lists, views, creates, updates, and deletes users via the backend `/users` and `/roles` endpoints at `/admin/management-user`.
 - Sample dashboard widgets (charts, cards) inherited from the Berry template.
@@ -124,7 +124,7 @@ The frontend talks to the Laravel API in `backend-laravel-v1`. The relationship 
 
 - **Base URL:** `import.meta.env.VITE_API_BASE_URL` (default `http://localhost:8000/api`).
 - **Web Push VAPID public key:** `import.meta.env.VITE_VAPID_PUBLIC_KEY` (URL-safe base64; must match backend `VAPID_PUBLIC_KEY`). **Private key stays on the server only.**
-- **Auth scheme:** JWT bearer token (`Authorization: Bearer <token>`); token saved in `localStorage` under key `access_token`.
+- **Auth scheme:** JWT bearer token (`Authorization: Bearer <token>`). **M2/M4:** `utils/auth.js` keeps an in-memory token cache with `localStorage` persistence for route-guard reload support; setup-required login skips token/user persistence.
 - **Endpoints actually called from the frontend (non-exhaustive; see [Section 5](#5-api-integration)):**
   - `POST /auth/login` (with legacy fallback to `POST /login` on 404) — login.
   - `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}`, `DELETE /users/{id}` — user CRUD.
