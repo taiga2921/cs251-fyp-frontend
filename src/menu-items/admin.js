@@ -71,6 +71,12 @@ const admin = {
           title: 'Vehicle',
           type: 'item',
           url: '/admin/management-vehicle'
+        },
+        {
+          id: 'admin-auth-monitoring',
+          title: 'Auth Monitoring',
+          type: 'item',
+          url: '/admin/auth-monitoring'
         }
       ]
     }

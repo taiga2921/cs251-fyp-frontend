@@ -43,6 +43,7 @@ const AdminAnprEventDetail = Loadable(lazy(() => import('../feature/anpr-monitor
 
 const AdminBlockchainMonitoring = Loadable(lazy(() => import('../feature/blockchain-monitoring/views/BlockchainDashboard')));
 const AdminBlockchainRecordDetail = Loadable(lazy(() => import('../feature/blockchain-monitoring/views/BlockchainRecordDetail')));
+const AdminAuthMonitoring = Loadable(lazy(() => import('../feature/auth-monitoring/views/AuthMonitoringDashboard')));
 
 const AdminVehicleManagement = Loadable(lazy(() => import('../feature/management-vehicle/views/VehicleList')));
 const AdminVehicleManagementView = Loadable(lazy(() => import('../feature/management-vehicle/views/VehicleDetail')));
@@ -185,6 +186,10 @@ const MainRoutes = {
     {
       path: 'admin/blockchain-monitoring/:blockchainRecordId',
       element: adminOrOperator(<AdminBlockchainRecordDetail />)
+    },
+    {
+      path: 'admin/auth-monitoring',
+      element: adminOnly(<AdminAuthMonitoring />)
     },
     {
       path: 'admin/management-vehicle',

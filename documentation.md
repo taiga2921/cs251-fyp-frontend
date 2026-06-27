@@ -908,6 +908,8 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 
 **Login Module M6 (rate limiting and lockout):** Login form displays backend lockout messages (**429**); password clears on **401** and **429**; `/auth/login` **429** does not trigger refresh. See [`../backend-laravel-v1/docs/login/m6-rate-limiting-lockout-and-otp-protection.md`](../backend-laravel-v1/docs/login/m6-rate-limiting-lockout-and-otp-protection.md).
 
+**Login Module M7 (auth audit and session monitoring):** Admin route `/admin/auth-monitoring` lists audit logs and refresh sessions via `feature/auth-monitoring` (repository/controller/service pattern). Sensitive values (tokens, hashes, OTP, secrets) are not rendered. See [`../backend-laravel-v1/docs/login/m7-auth-audit-logs-and-session-monitoring.md`](../backend-laravel-v1/docs/login/m7-auth-audit-logs-and-session-monitoring.md).
+
 ### Login Flow
 
 Implemented in `src/views/pages/auth-forms/AuthLogin.jsx`.
