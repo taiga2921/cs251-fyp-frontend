@@ -683,7 +683,7 @@ Props: `allowedRoles` (array), `children`.
 
 #### `GuestRoute`
 
-Authenticated visitors → role default route (not always `/dashboard`).
+Authenticated visitors with a valid session → role default route (not always `/dashboard`). If a token exists but `validateAuthSession()` fails, `GuestRoute` clears the stale local session and renders the guest page.
 
 ### Redirect Behavior Summary
 

@@ -9,6 +9,8 @@ export default function GuestRoute({ children }) {
       clearAuthSession();
     } else if (validateAuthSession()) {
       return <Navigate to={getDefaultRouteForRole(getAuthUserRole())} replace />;
+    } else {
+      clearAuthSession();
     }
   }
 
