@@ -654,7 +654,9 @@ Seeded backend roles: **Admin**, **Security Operator**, **Guard**.
 
 **Role resolution** supports `auth_user.role.name`, `auth_user.role` (string), and `auth_user.role_name`.
 
-**Invalid session:** token without parseable `auth_user`, `setup_required = true`, or `two_factor_enabled = false` → `clearAuthSession()` → `/login`.
+**Invalid session:** token without parseable `auth_user`, `setup_required = true`, or `two_factor_enabled !== true` (missing, `false`, `null`, or stale pre-M5 values) → `clearAuthSession()` → `/login`.
+
+Protected frontend sessions require **`two_factor_enabled === true`**. Missing or non-true values are treated as invalid and cleared.
 
 ### Route Guards
 
@@ -662,7 +664,7 @@ Guards live in `src/routes/guards/`.
 
 #### `ProtectedRoute`
 
-Wraps `MainLayout` — requires valid JWT, parseable `auth_user`, `setup_required !== true`, and `two_factor_enabled !== false` (`validateAuthSession()`).
+Wraps `MainLayout` — requires valid JWT, parseable `auth_user`, `setup_required !== true`, and **`two_factor_enabled === true`** (`validateAuthSession()` / `isAuthUserTwoFactorEnabled()`).
 
 #### `RoleProtectedRoute`
 
@@ -670,14 +672,14 @@ Props: `allowedRoles` (array), `children`.
 
 - No token → `/login`
 - `setup_required = true` → `clearAuthSession()` → `/login` (`state.setupRequired = true`)
-- `two_factor_enabled = false` → `clearAuthSession()` → `/login` (`state.twoFactorRequired = true`)
+- `two_factor_enabled !== true` (missing, `false`, stale pre-M5) → `clearAuthSession()` → `/login` (`state.twoFactorRequired = true`)
 - Invalid `auth_user` / session → `clearAuthSession()` → `/login`
 - Role missing → `clearAuthSession()` → `/login`
 - Role not in `allowedRoles` → `/forbidden`
 
 #### `RoleHomeRedirect`
 
-`/` index route — sends authenticated users to `getDefaultRouteForRole()`. Uses `validateAuthSession()`, which rejects incomplete setup and incomplete 2FA.
+`/` index route — sends authenticated users to `getDefaultRouteForRole()`. Uses `validateAuthSession()`, which rejects incomplete setup and any `auth_user` without **`two_factor_enabled === true`**.
 
 #### `GuestRoute`
 
@@ -978,7 +980,7 @@ Auth endpoints (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`, `/auth
 
 **M5 QR rendering:** `qrcode.react` renders the authenticator QR locally from `otpauth_uri`; no external QR API is used.
 
-**Route guards:** `ProtectedRoute` and `RoleProtectedRoute` clear sessions when stored `auth_user` has `setup_required = true` or `two_factor_enabled = false`.
+**Route guards:** `ProtectedRoute` and `RoleProtectedRoute` clear sessions when stored `auth_user` has `setup_required = true` or **`two_factor_enabled !== true`** (strict default-deny; stale pre-M5 sessions without the field are rejected).
 
 The refresh token remains browser-managed through an HttpOnly cookie and is never read or stored by JavaScript.
 

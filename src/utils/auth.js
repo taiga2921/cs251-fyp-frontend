@@ -150,7 +150,7 @@ export function validateAuthSession() {
     return false;
   }
 
-  if (user.two_factor_enabled === false) {
+  if (user.two_factor_enabled !== true) {
     return false;
   }
 
@@ -162,7 +162,7 @@ export function isAuthUserTwoFactorEnabled() {
   if (!user) {
     return false;
   }
-  return user.two_factor_enabled !== false;
+  return user.two_factor_enabled === true;
 }
 
 export function isAuthUserFullyInitialized() {

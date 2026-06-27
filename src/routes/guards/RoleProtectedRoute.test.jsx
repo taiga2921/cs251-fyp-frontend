@@ -54,6 +54,20 @@ describe('RoleProtectedRoute', () => {
     expect(localStorage.getItem(AUTH_USER_KEY)).toBeNull();
   });
 
+  it('redirects role-protected users with missing two_factor_enabled to login and clears session', () => {
+    renderRoleRoute({
+      id: '1',
+      email: 'admin@example.com',
+      setup_required: false,
+      role: { name: 'Admin' }
+    });
+
+    expect(screen.getByText('Login page')).toBeInTheDocument();
+    expect(screen.queryByText('Protected admin content')).not.toBeInTheDocument();
+    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem(AUTH_USER_KEY)).toBeNull();
+  });
+
   it('renders protected content for valid user with completed 2FA and allowed role', () => {
     renderRoleRoute({
       id: '1',
