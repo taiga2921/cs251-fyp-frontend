@@ -1,5 +1,7 @@
 export const AUTH_TOKEN_KEY = 'access_token';
 export const AUTH_USER_KEY = 'auth_user';
+export const SESSION_EXPIRED_FLAG_KEY = 'auth_session_expired';
+export const AUTH_SESSION_EXPIRED_EVENT = 'auth:session-expired';
 
 export const ROLES = {
   ADMIN: 'Admin',
@@ -12,7 +14,13 @@ const CANONICAL_ROLES = [ROLES.ADMIN, ROLES.SECURITY_OPERATOR, ROLES.GUARD];
 /** All authenticated app roles — used for shared routes such as Patrol Home. */
 export const ALL_ROLES = [...CANONICAL_ROLES];
 
+/** In-memory access token cache (M2 migration step; localStorage remains for route-guard reload support). */
+let memoryAuthToken = null;
+
 export function getAuthToken() {
+  if (memoryAuthToken) {
+    return memoryAuthToken;
+  }
   return localStorage.getItem(AUTH_TOKEN_KEY);
 }
 
@@ -21,10 +29,12 @@ export function hasAuthToken() {
 }
 
 export function setAuthToken(token) {
+  memoryAuthToken = token;
   localStorage.setItem(AUTH_TOKEN_KEY, token);
 }
 
 export function clearAuthToken() {
+  memoryAuthToken = null;
   localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
@@ -136,4 +146,37 @@ export function validateAuthSession() {
 export function clearAuthSession() {
   clearAuthToken();
   localStorage.removeItem(AUTH_USER_KEY);
+}
+
+/** Non-sensitive flag so session-expired UX survives redirect to /login. */
+export function markSessionExpired() {
+  try {
+    sessionStorage.setItem(SESSION_EXPIRED_FLAG_KEY, '1');
+  } catch {
+    /* ignore storage failures in private mode */
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(AUTH_SESSION_EXPIRED_EVENT));
+  }
+}
+
+export function consumeSessionExpiredFlag() {
+  try {
+    const flag = sessionStorage.getItem(SESSION_EXPIRED_FLAG_KEY);
+    if (flag) {
+      sessionStorage.removeItem(SESSION_EXPIRED_FLAG_KEY);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+export function clearSessionExpiredFlag() {
+  try {
+    sessionStorage.removeItem(SESSION_EXPIRED_FLAG_KEY);
+  } catch {
+    /* ignore */
+  }
 }

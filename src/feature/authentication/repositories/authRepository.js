@@ -11,4 +11,13 @@ export class AuthRepository {
       throw error;
     }
   }
+
+  async refreshSession() {
+    try {
+      return await this.dataSource.refresh();
+    } catch (error) {
+      console.error('Error during refresh:', error);
+      throw error;
+    }
+  }
 }

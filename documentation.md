@@ -246,7 +246,8 @@ View
                 └─ src/api/api.js (fetch wrapper)
                      ├─ adds Authorization: Bearer <token>
                      ├─ JSON body unless FormData
-                     └─ on 401 → clearAuthToken() + redirect to /login
+                     └─ on 401 (protected) → runAuthRefresh() → retry once (M2)
+                          └─ on refresh failure → clearAuthSession + session-expired UX + /login
                           └─ Laravel API
 ```
 
@@ -356,7 +357,8 @@ frontend-react-v1/
 
 | File      | Purpose                                                                                                                                                                                                                                                                                                                                                    |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api.js`  | Centralized `fetch` wrapper. Builds headers (`Accept: application/json`, optional `Authorization: Bearer <token>`, JSON content-type unless `FormData`). Sends `credentials: 'include'` for HttpOnly refresh-cookie support (M1). Throws on non-2xx, attaches `error.status` and `error.data`. Redirects to `/login` and clears the token on `401` (refresh-on-401 deferred to M2). Reads base URL from `VITE_API_BASE_URL` (fallback `http://localhost:8000/api`). |
+| `api.js`  | Centralized `fetch` wrapper. Builds headers (`Accept: application/json`, optional `Authorization: Bearer <token>`, JSON content-type unless `FormData`). Sends `credentials: 'include'` for HttpOnly refresh-cookie support (M1). On `401`, calls shared refresh queue (`authRefreshQueue.js`), retries the original request once, and only clears session when refresh fails (M2). Auth paths (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`) and `{ skipAuthRefresh: true }` bypass refresh. Throws on non-2xx with `error.status` and `error.data`. Session-expired dialog via `auth:session-expired` event. Reads base URL from `VITE_API_BASE_URL` (fallback `http://localhost:8000/api`). See [`backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md`](../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md). |
+| `authRefreshQueue.js` | **M2** — deduplicates concurrent refresh calls; exports `runAuthRefresh()`. |
 | `menu.js` | Tiny SWR-based store for `isDashboardDrawerOpened`. Exposes `useGetMenuMaster()` (read) and `handlerDrawerOpen(value)` (write via `mutate`). Despite the file path, **no remote call is made** — the SWR fetcher just returns the initial state.                                                                                                           |
 
 ### `src/feature/`
@@ -399,7 +401,7 @@ feature/management-user/
     └── UserEdit.jsx                 # Imports unresolved components — see Section 13
 ```
 
-The other feature folders vary in completeness. **`feature/authentication/`** — `datasources/authService.js` (`POST /auth/logout`), `repositories/authRepository.js`, `controllers/useAuthController.js` (`handleLogout`, cross-tab `storage` sync). Login UI remains in `views/pages/auth-forms/AuthLogin.jsx`. **`management-zone/`** — zone CRUD. **`management-checkpoint/`** — checkpoint CRUD (see [Checkpoint management](#checkpoint-management-milestone-8)). **`management-camera/`** — future scope only; no Admin sidebar link or `MainRoutes` entry yet.
+The other feature folders vary in completeness. **`feature/authentication/`** — `datasources/authService.js` (`POST /auth/logout`, `POST /auth/refresh` via direct fetch), `repositories/authRepository.js`, `controllers/useAuthController.js` (`handleLogout`, cross-tab `storage` sync), `components/SessionExpiredDialog.jsx` (M2). Login UI remains in `views/pages/auth-forms/AuthLogin.jsx`. **`management-zone/`** — zone CRUD. **`management-checkpoint/`** — checkpoint CRUD (see [Checkpoint management](#checkpoint-management-milestone-8)). **`management-camera/`** — future scope only; no Admin sidebar link or `MainRoutes` entry yet.
 
 **Patrol (`feature/patrol/`):** `views/PartrolHome.jsx` (sole patrol UI), `controllers/usePatrolController.js`, `repositories/patrolRepository.js`, `datasources/patrolService.js` ( **`/patrol-sessions`**, **`/checkpoint-events`**, **`/patrol-routes`** ), `services/geolocationService.js` (domain GPS — **`pwa/locationLogService`** + **`pwa/geolocationService`**), presentational `components/PatrolTracking.jsx`, and **`components/PatrolPwaStatusPanel.jsx`** (Dexie + sync-queue telemetry, 3s polling; **no** GPS start/stop). **Patrol ID contract:** Dexie **`patrolId`** and PWA sync **`patrolId`** must equal Laravel **`patrol_sessions.id`** (not legacy **`patrol-logs`**). GPS is orchestrated only from **`usePatrolController`** via **`startPatrolTracking`**, **`stopPatrolTracking`**, and **`capturePatrolLocationSnapshot`** in `services/geolocationService.js`. **`GET /zones`** for the guard zone dropdown is normalized in **`patrolService`** / **`PatrolRepository`** to an **array of zones** (see [Patrol zone list (`GET /zones`)](#patrol-zone-list-get-zones)); **`PartrolHome`** keeps a stable **`PatrolRepository`** instance via **`useRef`** so zone loading does not refetch in a loop.
 
@@ -491,7 +493,7 @@ Reusable presentational components.
 
 | File                   | Purpose                                                                                                                                    |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `auth.js`              | Token storage utilities. Exports `AUTH_TOKEN_KEY = 'access_token'`, `getAuthToken`, `hasAuthToken`, `setAuthToken`, `clearAuthToken`.      |
+| `auth.js`              | Token storage utilities. Exports `AUTH_TOKEN_KEY = 'access_token'`, `getAuthToken`, `hasAuthToken`, `setAuthToken`, `clearAuthToken`. **M2:** in-memory token cache (localStorage fallback for route guards); `markSessionExpired` / `consumeSessionExpiredFlag` for session-expired UX. |
 | `colorUtils.js`        | `hexToRgbChannel`, `extendPaletteWithChannels`, `withAlpha` — hex→rgb channel string and CSS-var-aware alpha handling for the MUI palette. |
 | `getImageUrl.js`       | Builds an `import.meta.url`-relative image path (`/src/assets/images/<path>/<name>`).                                                      |
 | `password-strength.js` | Pure scoring functions used by the (static) Register form: `strengthIndicator`, `strengthColor`.                                           |

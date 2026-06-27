@@ -1,14 +1,16 @@
-import { clearAuthSession, getAuthToken } from 'utils/auth';
+import { runAuthRefresh, SessionExpiredError } from 'api/authRefreshQueue';
+import { clearAuthSession, getAuthToken, markSessionExpired } from 'utils/auth';
 
 // Base API URL from .env or fallback localhost
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
-// Redirect to login if not already on login page
 const redirectToLogin = () => {
   if (window.location.pathname !== '/login') {
     window.location.replace('/login');
   }
 };
+
+const normalizePath = (url) => url.split('?')[0];
 
 // Build headers with authorization token if present
 const buildHeaders = (customHeaders = {}, data) => {
@@ -18,15 +20,12 @@ const buildHeaders = (customHeaders = {}, data) => {
     ...customHeaders
   };
 
-  // Add JWT Authorization token if present
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  // Set Content-Type to JSON if not FormData
   const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
 
-  // Set Content-Type to JSON if not FormData and not already set
   if (!isFormData && data !== undefined && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
@@ -34,36 +33,70 @@ const buildHeaders = (customHeaders = {}, data) => {
   return headers;
 };
 
-// Main request handler
-const request = async (method, url, data, options = {}) => {
-  const response = await fetch(`${API_BASE_URL}${url}`, {
+const parseResponseBody = async (response) => {
+  const contentType = response.headers.get('content-type') || '';
+  return contentType.includes('application/json') ? await response.json() : await response.text();
+};
+
+const throwStructuredError = (response, responseData, message = 'API request failed') => {
+  const error = new Error(message);
+  error.status = response.status;
+  error.data = responseData;
+  throw error;
+};
+
+const handleSessionExpired = () => {
+  clearAuthSession();
+  markSessionExpired();
+  redirectToLogin();
+};
+
+const executeFetch = async (method, url, data, options = {}) => {
+  return fetch(`${API_BASE_URL}${url}`, {
     method,
     credentials: 'include',
     headers: buildHeaders(options.headers, data),
     body: data === undefined ? undefined : data instanceof FormData ? data : JSON.stringify(data)
   });
+};
 
-  // If unauthorized, clear token and redirect to login
+// Main request handler
+const request = async (method, url, data, options = {}, isRetry = false) => {
+  const response = await executeFetch(method, url, data, options);
+  const responseData = await parseResponseBody(response);
+  const path = normalizePath(url);
+
   if (response.status === 401) {
-    clearAuthSession();
-    redirectToLogin();
-    throw new Error('Unauthorized');
+    if (path === '/auth/login' || path === '/login') {
+      throwStructuredError(response, responseData, 'Unauthorized');
+    }
+
+    if (path === '/auth/logout' || path === '/auth/refresh') {
+      throwStructuredError(response, responseData, 'Unauthorized');
+    }
+
+    if (options.skipAuthRefresh) {
+      throwStructuredError(response, responseData, 'Unauthorized');
+    }
+
+    if (isRetry) {
+      handleSessionExpired();
+      throw new SessionExpiredError('Session expired');
+    }
+
+    try {
+      await runAuthRefresh();
+      return request(method, url, data, options, true);
+    } catch (error) {
+      redirectToLogin();
+      throw error instanceof SessionExpiredError ? error : new SessionExpiredError(error?.message || 'Session expired');
+    }
   }
 
-  // Detect response type
-  const contentType = response.headers.get('content-type') || '';
-
-  const responseData = contentType.includes('application/json') ? await response.json() : await response.text();
-
-  // If not OK, throw error with status and data
   if (!response.ok) {
-    const error = new Error('API request failed');
-    error.status = response.status;
-    error.data = responseData;
-    throw error;
+    throwStructuredError(response, responseData);
   }
 
-  // Return response data, status, and headers
   return {
     data: responseData,
     status: response.status,
@@ -71,7 +104,10 @@ const request = async (method, url, data, options = {}) => {
   };
 };
 
-// API methods
+/**
+ * Central API client.
+ * Options: `{ headers?, skipAuthRefresh?: boolean }` — set `skipAuthRefresh: true` to bypass refresh-on-401.
+ */
 const api = {
   get: (url, options) => request('GET', url, undefined, options),
   post: (url, data, options) => request('POST', url, data, options),

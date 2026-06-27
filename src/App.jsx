@@ -6,6 +6,7 @@ import router from 'routes';
 // project imports
 import NetworkSnackbar from 'components/NetworkSnackbar';
 import NavigationScroll from 'layout/NavigationScroll';
+import SessionExpiredDialog from 'feature/authentication/components/SessionExpiredDialog';
 
 import ThemeCustomization from 'themes';
 
@@ -19,6 +20,7 @@ export default function App() {
       <NavigationScroll>
         <>
           <NetworkSnackbar />
+          <SessionExpiredDialog />
           <RouterProvider router={router} />
         </>
       </NavigationScroll>
