@@ -103,6 +103,19 @@ export default function AuthLogin() {
       const payload = { email: email.trim(), password };
       const response = await submitLogin(payload);
       const responseData = response?.data?.data || {};
+
+      if (responseData.next_step === 'password_setup_required') {
+        navigate('/first-login/setup', {
+          replace: true,
+          state: {
+            setupToken: responseData.setup_token,
+            email: responseData.user?.email || email.trim(),
+            expiresIn: responseData.expires_in
+          }
+        });
+        return;
+      }
+
       const token = responseData.access_token;
       const user = responseData.user;
 

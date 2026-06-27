@@ -20,4 +20,13 @@ export class AuthRepository {
       throw error;
     }
   }
+
+  async completePasswordSetup(payload) {
+    try {
+      return await this.dataSource.completePasswordSetup(payload);
+    } catch (error) {
+      console.error('Error during password setup:', error);
+      throw error;
+    }
+  }
 }

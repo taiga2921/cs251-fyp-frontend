@@ -19,6 +19,19 @@ export function normalizeRefreshResponse(body) {
   };
 }
 
+/**
+ * Normalize password setup completion payloads from Laravel ({ data: { ... } }) or flat shapes.
+ */
+export function normalizePasswordSetupResponse(body) {
+  const payload = body?.data && typeof body.data === 'object' && body.data.next_step != null ? body.data : body;
+
+  return {
+    nextStep: payload?.next_step ?? null,
+    user: payload?.user ?? null,
+    raw: body
+  };
+}
+
 const authService = {
   /**
    * Invalidate the current JWT on the backend.
@@ -68,6 +81,17 @@ const authService = {
     }
 
     return normalized;
+  },
+
+  /**
+   * Complete first-login password setup with a one-time setup token.
+   * @param {{ setup_token: string, password: string, password_confirmation: string }} payload
+   * @returns {Promise<{ nextStep: string|null, user: object|null, raw: unknown }>}
+   */
+  async completePasswordSetup(payload) {
+    const response = await api.post('/auth/password-setup/complete', payload, { skipAuthRefresh: true });
+    const body = extractResponsePayload(response);
+    return normalizePasswordSetupResponse(body);
   }
 };
 

@@ -140,7 +140,22 @@ export function validateAuthSession() {
   if (!hasAuthToken()) {
     return false;
   }
-  return getAuthUser() !== null;
+
+  const user = getAuthUser();
+  if (user === null) {
+    return false;
+  }
+
+  if (user.setup_required === true) {
+    return false;
+  }
+
+  return true;
+}
+
+export function isAuthUserSetupRequired() {
+  const user = getAuthUser();
+  return Boolean(user?.setup_required);
 }
 
 export function clearAuthSession() {

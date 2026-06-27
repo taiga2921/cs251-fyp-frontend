@@ -71,7 +71,7 @@ const request = async (method, url, data, options = {}, isRetry = false) => {
       throwStructuredError(response, responseData, 'Unauthorized');
     }
 
-    if (path === '/auth/logout' || path === '/auth/refresh') {
+    if (path === '/auth/logout' || path === '/auth/refresh' || path === '/auth/password-setup/complete') {
       throwStructuredError(response, responseData, 'Unauthorized');
     }
 

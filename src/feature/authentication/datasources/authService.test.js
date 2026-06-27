@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { normalizeRefreshResponse } from './authService';
+import { normalizePasswordSetupResponse, normalizeRefreshResponse } from './authService';
 
 describe('authService.normalizeRefreshResponse', () => {
   it('accepts Laravel envelope shape', () => {
@@ -30,6 +30,64 @@ describe('authService.normalizeRefreshResponse', () => {
 
     expect(result.accessToken).toBe('jwt-flat');
     expect(result.user).toEqual({ id: 2 });
+  });
+});
+
+describe('authService.normalizePasswordSetupResponse', () => {
+  it('accepts Laravel envelope shape', () => {
+    const result = normalizePasswordSetupResponse({
+      success: true,
+      data: {
+        next_step: 'two_factor_setup_required',
+        user: { email: 'user@example.com', setup_required: false }
+      }
+    });
+
+    expect(result.nextStep).toBe('two_factor_setup_required');
+    expect(result.user).toEqual({ email: 'user@example.com', setup_required: false });
+  });
+});
+
+vi.mock('api/api', () => ({
+  default: {
+    post: vi.fn()
+  }
+}));
+
+describe('authService.completePasswordSetup', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('posts to password setup endpoint with skipAuthRefresh', async () => {
+    const api = (await import('api/api')).default;
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          next_step: 'two_factor_setup_required',
+          user: { email: 'user@example.com' }
+        }
+      }
+    });
+
+    const authService = (await import('./authService')).default;
+    const result = await authService.completePasswordSetup({
+      setup_token: 'plain-token',
+      password: 'StrongPassword1!',
+      password_confirmation: 'StrongPassword1!'
+    });
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/auth/password-setup/complete',
+      {
+        setup_token: 'plain-token',
+        password: 'StrongPassword1!',
+        password_confirmation: 'StrongPassword1!'
+      },
+      { skipAuthRefresh: true }
+    );
+    expect(result.nextStep).toBe('two_factor_setup_required');
   });
 });
 

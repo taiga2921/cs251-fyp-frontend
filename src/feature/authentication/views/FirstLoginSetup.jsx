@@ -1,25 +1,20 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import useMediaQuery from '@mui/material/useMediaQuery';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-import Alert from '@mui/material/Alert';
 
-// project imports
-import AuthWrapper1 from './AuthWrapper1';
-import AuthCardWrapper from './AuthCardWrapper';
-
+import AuthWrapper1 from 'views/pages/authentication/AuthWrapper1';
+import AuthCardWrapper from 'views/pages/authentication/AuthCardWrapper';
 import Logo from 'ui-component/Logo';
 import AuthFooter from 'ui-component/cards/AuthFooter';
-import AuthLogin from '../auth-forms/AuthLogin';
+import PasswordSetupForm from 'feature/authentication/components/PasswordSetupForm';
+import usePasswordSetupController from 'feature/authentication/controllers/usePasswordSetupController';
 
-// ================================|| AUTH3 - LOGIN ||================================ //
-
-export default function Login() {
+export default function FirstLoginSetup() {
   const downMD = useMediaQuery((theme) => theme.breakpoints.down('md'));
-  const location = useLocation();
-  const passwordSetupComplete = location.state?.passwordSetupComplete;
+  const controller = usePasswordSetupController();
 
   return (
     <AuthWrapper1>
@@ -35,20 +30,27 @@ export default function Login() {
                 </Box>
                 <Stack sx={{ alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                   <Typography variant={downMD ? 'h3' : 'h2'} sx={{ color: 'secondary.main' }}>
-                    Hi, Welcome Back
+                    Set your password
                   </Typography>
                   <Typography variant="caption" sx={{ fontSize: '16px', textAlign: { xs: 'center', md: 'inherit' } }}>
-                    Enter your credentials to continue
+                    Choose a permanent password to continue account setup
                   </Typography>
                 </Stack>
-                {passwordSetupComplete ? (
-                  <Alert severity="success" sx={{ width: 1 }}>
-                    Password setup complete. Sign in with your new password. Two-factor authentication setup will be required in a
-                    future step.
-                  </Alert>
-                ) : null}
                 <Box sx={{ width: 1 }}>
-                  <AuthLogin />
+                  <PasswordSetupForm
+                    email={controller.email}
+                    password={controller.password}
+                    setPassword={controller.setPassword}
+                    passwordConfirmation={controller.passwordConfirmation}
+                    setPasswordConfirmation={controller.setPasswordConfirmation}
+                    errors={controller.errors}
+                    setErrors={controller.setErrors}
+                    submitError={controller.submitError}
+                    isSubmitting={controller.isSubmitting}
+                    missingSetupContext={controller.missingSetupContext}
+                    passwordMinLength={controller.passwordMinLength}
+                    onSubmit={controller.handleSubmit}
+                  />
                 </Box>
               </Stack>
             </AuthCardWrapper>

@@ -272,14 +272,13 @@ See [Section 4](#4-routing-documentation) for the full table.
    │  Page   │                       │ (fallback /login)│
    └────┬────┘                       └────────┬─────────┘
         │ 200 OK                              │
-        │  data.access_token, data.user       │
-        ▼                                     │
-   localStorage:                              │
-     access_token = <JWT>                     │
-     auth_user    = <user JSON>               │
+        ├─ M4: next_step =                    │
+        │  password_setup_required            │
+        │  → /first-login/setup               │
+        │  (setup_token in route state only)  │
         │                                     │
-        ▼                                     │
-   navigate('/dashboard')                     │
+        └─ access_token + user                │
+           localStorage + role home route      │
                                               ▼
    Subsequent API calls ──► Authorization: Bearer <JWT>
                                 │
@@ -361,7 +360,7 @@ frontend-react-v1/
 
 | File      | Purpose                                                                                                                                                                                                                                                                                                                                                    |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api.js`  | Centralized `fetch` wrapper. Builds headers (`Accept: application/json`, optional `Authorization: Bearer <token>`, JSON content-type unless `FormData`). Sends `credentials: 'include'` for HttpOnly refresh-cookie support (M1). On `401`, calls shared refresh queue (`authRefreshQueue.js`), retries the original request once, and only clears session when refresh fails (M2). Auth paths (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`) and `{ skipAuthRefresh: true }` bypass refresh. Throws on non-2xx with `error.status` and `error.data`. Session-expired dialog via `auth:session-expired` event. Reads base URL from `VITE_API_BASE_URL` (fallback `http://localhost:8000/api`). See [`backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md`](../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md). |
+| `api.js`  | Centralized `fetch` wrapper. Builds headers (`Accept: application/json`, optional `Authorization: Bearer <token>`, JSON content-type unless `FormData`). Sends `credentials: 'include'` for HttpOnly refresh-cookie support (M1). On `401`, calls shared refresh queue (`authRefreshQueue.js`), retries the original request once, and only clears session when refresh fails (M2). Auth paths (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`, `/auth/password-setup/complete`) and `{ skipAuthRefresh: true }` bypass refresh. Throws on non-2xx with `error.status` and `error.data`. Session-expired dialog via `auth:session-expired` event. Reads base URL from `VITE_API_BASE_URL` (fallback `http://localhost:8000/api`). See [`backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md`](../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md). |
 | `authRefreshQueue.js` | **M2** — deduplicates concurrent refresh calls; exports `runAuthRefresh()`. |
 | `menu.js` | Tiny SWR-based store for `isDashboardDrawerOpened`. Exposes `useGetMenuMaster()` (read) and `handlerDrawerOpen(value)` (write via `mutate`). Despite the file path, **no remote call is made** — the SWR fetcher just returns the initial state.                                                                                                           |
 
@@ -405,7 +404,7 @@ feature/management-user/
     └── UserEdit.jsx                 # Imports unresolved components — see Section 13
 ```
 
-The other feature folders vary in completeness. **`feature/authentication/`** — `datasources/authService.js` (`POST /auth/logout`, `POST /auth/refresh` via direct fetch), `repositories/authRepository.js`, `controllers/useAuthController.js` (`handleLogout`, cross-tab `storage` sync), `components/SessionExpiredDialog.jsx` (M2). Login UI remains in `views/pages/auth-forms/AuthLogin.jsx`. **`management-zone/`** — zone CRUD. **`management-checkpoint/`** — checkpoint CRUD (see [Checkpoint management](#checkpoint-management-milestone-8)). **`management-camera/`** — future scope only; no Admin sidebar link or `MainRoutes` entry yet.
+The other feature folders vary in completeness. **`feature/authentication/`** — `datasources/authService.js` (`POST /auth/logout`, `POST /auth/refresh` via direct fetch, `POST /auth/password-setup/complete` via `api.js`), `repositories/authRepository.js`, `controllers/useAuthController.js` (`handleLogout`, cross-tab `storage` sync), `controllers/usePasswordSetupController.js` (M4 first-login setup), `components/SessionExpiredDialog.jsx` (M2), `components/PasswordSetupForm.jsx` (M4), `views/FirstLoginSetup.jsx` (M4). Login UI remains in `views/pages/auth-forms/AuthLogin.jsx`. **`management-zone/`** — zone CRUD. **`management-checkpoint/`** — checkpoint CRUD (see [Checkpoint management](#checkpoint-management-milestone-8)). **`management-camera/`** — future scope only; no Admin sidebar link or `MainRoutes` entry yet.
 
 **Patrol (`feature/patrol/`):** `views/PartrolHome.jsx` (sole patrol UI), `controllers/usePatrolController.js`, `repositories/patrolRepository.js`, `datasources/patrolService.js` ( **`/patrol-sessions`**, **`/checkpoint-events`**, **`/patrol-routes`** ), `services/geolocationService.js` (domain GPS — **`pwa/locationLogService`** + **`pwa/geolocationService`**), presentational `components/PatrolTracking.jsx`, and **`components/PatrolPwaStatusPanel.jsx`** (Dexie + sync-queue telemetry, 3s polling; **no** GPS start/stop). **Patrol ID contract:** Dexie **`patrolId`** and PWA sync **`patrolId`** must equal Laravel **`patrol_sessions.id`** (not legacy **`patrol-logs`**). GPS is orchestrated only from **`usePatrolController`** via **`startPatrolTracking`**, **`stopPatrolTracking`**, and **`capturePatrolLocationSnapshot`** in `services/geolocationService.js`. **`GET /zones`** for the guard zone dropdown is normalized in **`patrolService`** / **`PatrolRepository`** to an **array of zones** (see [Patrol zone list (`GET /zones`)](#patrol-zone-list-get-zones)); **`PartrolHome`** keeps a stable **`PatrolRepository`** instance via **`useRef`** so zone loading does not refetch in a loop.
 
@@ -578,6 +577,7 @@ Defined in `src/routes/AuthenticationRoutes.jsx`. Wrapped in `GuestRoute` — au
 | Path              | Component                             | Layout          | Purpose                                                    |
 | ----------------- | ------------------------------------- | --------------- | ---------------------------------------------------------- |
 | `/login`          | `views/pages/authentication/Login`    | `MinimalLayout` | JWT login form.                                            |
+| `/first-login/setup` | `feature/authentication/views/FirstLoginSetup` | `MinimalLayout` | **M4** — first-login password setup (setup token via route state only). |
 | `/pages/login`    | _redirect_                            | `MinimalLayout` | `<Navigate to="/login" replace />` (legacy compatibility). |
 | `/pages/register` | `views/pages/authentication/Register` | `MinimalLayout` | Static register page (UI only).                            |
 
@@ -879,6 +879,8 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 
 **Login Module M2 (frontend refresh-on-401):** Protected API `401` responses trigger `runAuthRefresh()` → `POST /auth/refresh` → access-token update → single retry. See [`../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md`](../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md).
 
+**Login Module M4 (first-login password setup):** Setup-required login returns `next_step=password_setup_required` without storing JWT; first-login setup at `/first-login/setup`. See [`../backend-laravel-v1/docs/login/m4-first-login-password-setup.md`](../backend-laravel-v1/docs/login/m4-first-login-password-setup.md). Mandatory TOTP is deferred to M5.
+
 ### Login Flow
 
 Implemented in `src/views/pages/auth-forms/AuthLogin.jsx`.
@@ -894,11 +896,18 @@ Implemented in `src/views/pages/auth-forms/AuthLogin.jsx`.
 
    ```js
    const responseData = response?.data?.data || {};
+   ```
+
+   **M4 — setup required:** If `responseData.next_step === 'password_setup_required'`, navigate to `/first-login/setup` with `setupToken`, `email`, and `expiresIn` in route state. Do **not** call `setAuthToken()` or `setAuthUser()`.
+
+   **Normal login:**
+
+   ```js
    const token = responseData.access_token;
    const user = responseData.user;
    ```
 
-5. The token must be present, otherwise the form throws `'Missing access token from login response.'`.
+5. For normal login, the token must be present, otherwise the form throws `'Missing access token from login response.'`.
 6. `setAuthToken(token)` writes `access_token` to `localStorage`.
 7. If a user object exists, it is also persisted: `localStorage.setItem('auth_user', JSON.stringify(user))`.
 8. Navigation: `navigate(getDefaultRouteForRole(role), { replace: true })`.
@@ -956,7 +965,9 @@ Centralizing the key avoids duplicated `localStorage.getItem('access_token')` ca
 
 M2 implements frontend refresh-on-401. When a protected API request returns `401`, `api.js` calls `runAuthRefresh()`, which uses `POST /auth/refresh` with `credentials: 'include'`. If refresh succeeds, the access token is updated and the original request is retried once. If refresh fails, the frontend clears auth state, marks the session-expired flag, redirects to `/login`, and shows `SessionExpiredDialog`.
 
-Auth endpoints (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`) and requests using `skipAuthRefresh: true` bypass refresh-on-401.
+Auth endpoints (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`, `/auth/password-setup/complete`) and requests using `skipAuthRefresh: true` bypass refresh-on-401.
+
+**M4 setup tokens:** One-time password setup tokens from login or admin create are held in React Router location state only — never `localStorage` or `sessionStorage`. Setup-required login does not call `setAuthToken()` or `setAuthUser()`.
 
 The refresh token remains browser-managed through an HttpOnly cookie and is never read or stored by JavaScript.
 

@@ -9,6 +9,7 @@ import GuestRoute from './guards/GuestRoute';
 // maintenance routing
 const LoginPage = Loadable(lazy(() => import('views/pages/authentication/Login')));
 const RegisterPage = Loadable(lazy(() => import('views/pages/authentication/Register')));
+const FirstLoginSetupPage = Loadable(lazy(() => import('feature/authentication/views/FirstLoginSetup')));
 
 // ==============================|| AUTHENTICATION ROUTING ||============================== //
 
@@ -23,6 +24,10 @@ const AuthenticationRoutes = {
     {
       path: 'login',
       element: <LoginPage />
+    },
+    {
+      path: 'first-login/setup',
+      element: <FirstLoginSetupPage />
     },
     {
       path: 'pages/login',
