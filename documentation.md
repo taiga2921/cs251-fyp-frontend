@@ -868,7 +868,7 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 
 **Login Module baseline (M0):** See [`../backend-laravel-v1/docs/login/m0-auth-baseline-and-current-audit.md`](../backend-laravel-v1/docs/login/m0-auth-baseline-and-current-audit.md) for the current JWT audit, protected API inventory, and migration path. Target design: [`../login-module.md`](../login-module.md).
 
-**Login Module M1 (refresh sessions):** Laravel now issues an HttpOnly refresh cookie on login and exposes `POST /api/auth/refresh`. The SPA sends `credentials: 'include'` on all API requests so the browser can store/send the cookie. Refresh-on-401 retry is **not** implemented until M2 — see [`../backend-laravel-v1/docs/login/m1-laravel-session-foundation-and-refresh-tokens.md`](../backend-laravel-v1/docs/login/m1-laravel-session-foundation-and-refresh-tokens.md).
+**Login Module M1 (refresh sessions):** Laravel now issues an HttpOnly refresh cookie on login and exposes `POST /api/auth/refresh`. The SPA sends `credentials: 'include'` on all API requests so the browser can store/send the cookie. `POST /api/auth/logout` is a **public** route: the backend revokes the refresh session from the HttpOnly cookie even when the JWT is missing or expired; the frontend still clears local state in `finally` regardless of network outcome. Refresh-on-401 retry is **not** implemented until M2 — see [`../backend-laravel-v1/docs/login/m1-laravel-session-foundation-and-refresh-tokens.md`](../backend-laravel-v1/docs/login/m1-laravel-session-foundation-and-refresh-tokens.md).
 
 ### Login Flow
 
@@ -918,7 +918,7 @@ Implemented end-to-end from the header Profile menu using the same layered patte
    - `setCurrentUser(null)`.
    - `navigate('/login', { replace: true })`.
 
-**Backend failure tolerance:** If logout returns `401` (expired token), the global `api.js` handler may clear the session and redirect before `finally` completes; `finally` still runs disconnect + `clearAuthSession()` + navigation. Network errors and other non-`401` failures skip showing an error for `401`; optional `logoutError` is set for offline/server issues only.
+**Backend failure tolerance:** Logout always returns **200** when the request reaches Laravel (M1 hardening patch): refresh revocation and cookie clearing succeed even without a bearer token or with an expired/invalid JWT. The frontend `finally` block still runs disconnect + `clearAuthSession()` + navigation. Network errors and non-`401` HTTP failures may set optional `logoutError`; `401` on other API calls still uses global `api.js` redirect behavior.
 
 **Cross-tab:** `useAuthController` listens for `storage` events on `access_token` / `auth_user`. When another tab clears the token, this tab disconnects realtime and navigates to `/login` (SPA navigation, not a full reload).
 
