@@ -108,6 +108,24 @@ describe('api.js refresh-on-401', () => {
     expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBe('stale-token');
   });
 
+  it('does not refresh on login 429', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(
+        {
+          success: false,
+          message: 'Too many unsuccessful sign-in attempts. Please try again later.',
+          data: { retry_after: 900 }
+        },
+        429
+      )
+    );
+
+    const api = await loadApi();
+    await expect(api.post('/auth/login', { email: 'a@b.com', password: 'x' })).rejects.toMatchObject({ status: 429 });
+    expect(runAuthRefreshMock).not.toHaveBeenCalled();
+    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBe('stale-token');
+  });
+
   it('does not refresh on legacy login 401', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ success: false, message: 'Invalid credentials.' }, 401));
 

@@ -161,7 +161,7 @@ export default function AuthLogin() {
       const message = extractErrorMessage(error);
       setSubmitError(message);
 
-      if (error?.status === 401) {
+      if (error?.status === 401 || error?.status === 429) {
         setPassword('');
       }
     } finally {

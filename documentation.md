@@ -906,6 +906,8 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 
 **Login Module M5 (mandatory TOTP 2FA):** Login branches to `two_factor_setup_required` or `otp_required`; setup at `/first-login/2fa`, OTP at `/login/otp`. Tokens issued only after verify. See [`../backend-laravel-v1/docs/login/m5-totp-two-factor-authentication.md`](../backend-laravel-v1/docs/login/m5-totp-two-factor-authentication.md).
 
+**Login Module M6 (rate limiting and lockout):** Login form displays backend lockout messages (**429**); password clears on **401** and **429**; `/auth/login` **429** does not trigger refresh. See [`../backend-laravel-v1/docs/login/m6-rate-limiting-lockout-and-otp-protection.md`](../backend-laravel-v1/docs/login/m6-rate-limiting-lockout-and-otp-protection.md).
+
 ### Login Flow
 
 Implemented in `src/views/pages/auth-forms/AuthLogin.jsx`.

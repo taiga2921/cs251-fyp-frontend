@@ -207,4 +207,59 @@ describe('AuthLogin auth routing', () => {
       );
     });
   });
+
+  it('displays backend lockout message on 429', async () => {
+    vi.mocked(api.post).mockRejectedValue({
+      status: 429,
+      data: {
+        success: false,
+        message: 'Too many unsuccessful sign-in attempts. Please try again later.',
+        data: { retry_after: 900 }
+      }
+    });
+
+    render(
+      <MemoryRouter>
+        <AuthLogin />
+      </MemoryRouter>
+    );
+
+    await userEvent.type(screen.getByLabelText(/email address/i), 'user@example.com');
+    await userEvent.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Too many unsuccessful sign-in attempts. Please try again later.')
+      ).toBeInTheDocument();
+    });
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+  });
+
+  it('clears password on 429 lockout', async () => {
+    vi.mocked(api.post).mockRejectedValue({
+      status: 429,
+      data: {
+        success: false,
+        message: 'Too many unsuccessful sign-in attempts. Please try again later.'
+      }
+    });
+
+    render(
+      <MemoryRouter>
+        <AuthLogin />
+      </MemoryRouter>
+    );
+
+    const passwordInput = screen.getByLabelText(/^password$/i);
+    await userEvent.type(screen.getByLabelText(/email address/i), 'user@example.com');
+    await userEvent.type(passwordInput, 'Password123!');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(passwordInput).toHaveValue('');
+    });
+  });
 });
