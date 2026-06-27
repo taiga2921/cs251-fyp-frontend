@@ -38,6 +38,7 @@ const buildHeaders = (customHeaders = {}, data) => {
 const request = async (method, url, data, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${url}`, {
     method,
+    credentials: 'include',
     headers: buildHeaders(options.headers, data),
     body: data === undefined ? undefined : data instanceof FormData ? data : JSON.stringify(data)
   });

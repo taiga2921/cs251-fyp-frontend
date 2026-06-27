@@ -356,7 +356,7 @@ frontend-react-v1/
 
 | File      | Purpose                                                                                                                                                                                                                                                                                                                                                    |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api.js`  | Centralized `fetch` wrapper. Builds headers (`Accept: application/json`, optional `Authorization: Bearer <token>`, JSON content-type unless `FormData`). Throws on non-2xx, attaches `error.status` and `error.data`. Redirects to `/login` and clears the token on `401`. Reads base URL from `VITE_API_BASE_URL` (fallback `http://localhost:8000/api`). |
+| `api.js`  | Centralized `fetch` wrapper. Builds headers (`Accept: application/json`, optional `Authorization: Bearer <token>`, JSON content-type unless `FormData`). Sends `credentials: 'include'` for HttpOnly refresh-cookie support (M1). Throws on non-2xx, attaches `error.status` and `error.data`. Redirects to `/login` and clears the token on `401` (refresh-on-401 deferred to M2). Reads base URL from `VITE_API_BASE_URL` (fallback `http://localhost:8000/api`). |
 | `menu.js` | Tiny SWR-based store for `isDashboardDrawerOpened`. Exposes `useGetMenuMaster()` (read) and `handlerDrawerOpen(value)` (write via `mutate`). Despite the file path, **no remote call is made** — the SWR fetcher just returns the initial state.                                                                                                           |
 
 ### `src/feature/`
@@ -867,6 +867,8 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 ## 6. Authentication & Authorization
 
 **Login Module baseline (M0):** See [`../backend-laravel-v1/docs/login/m0-auth-baseline-and-current-audit.md`](../backend-laravel-v1/docs/login/m0-auth-baseline-and-current-audit.md) for the current JWT audit, protected API inventory, and migration path. Target design: [`../login-module.md`](../login-module.md).
+
+**Login Module M1 (refresh sessions):** Laravel now issues an HttpOnly refresh cookie on login and exposes `POST /api/auth/refresh`. The SPA sends `credentials: 'include'` on all API requests so the browser can store/send the cookie. Refresh-on-401 retry is **not** implemented until M2 — see [`../backend-laravel-v1/docs/login/m1-laravel-session-foundation-and-refresh-tokens.md`](../backend-laravel-v1/docs/login/m1-laravel-session-foundation-and-refresh-tokens.md).
 
 ### Login Flow
 
