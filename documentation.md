@@ -33,7 +33,7 @@ This document is the primary technical reference for the **`frontend-react-v1`**
 The frontend currently provides:
 
 - A **JWT-protected dashboard layout** (header, sidebar, breadcrumbs, footer, theme customization).
-- A **login flow** that calls the Laravel backend (`POST /auth/login`, with legacy fallback to `POST /login` on 404). Normal login persists the JWT via `utils/auth.js` (in-memory cache with `localStorage` fallback for route guards). **M4:** setup-required login does not persist `access_token` or `auth_user`; the setup token is passed through React Router state only.
+- A **login flow** that calls the Laravel backend (`POST /auth/login`, with legacy fallback to `POST /login` on 404). **M5:** email/password alone does not issue tokens for initialized users; login branches to password setup, 2FA setup, or OTP challenge. JWT + `auth_user` are persisted via `utils/auth.js` only after successful OTP or 2FA setup verification. Setup tokens, 2FA setup tokens, and login challenge IDs use React Router state only (never `localStorage` / `sessionStorage`).
 - A **route-guarded** structure that separates protected app routes (`MainRoutes`) from guest-only routes (`AuthenticationRoutes`).
 - A **User Management module** under `feature/management-user` that lists, views, creates, updates, and deletes users via the backend `/users` and `/roles` endpoints at `/admin/management-user`.
 - Sample dashboard widgets (charts, cards) inherited from the Berry template.
@@ -47,7 +47,7 @@ The frontend currently provides:
 
 | Area                       | Status                               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | -------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Login (JWT)                | Implemented                          | `views/pages/auth-forms/AuthLogin.jsx`, persists token via `utils/auth.js`.                                                                                                                                                                                                                                                                                                                                                        |
+| Login (JWT + 2FA)         | Implemented                          | `AuthLogin.jsx` branches to `/first-login/setup`, `/first-login/2fa`, `/login/otp`; tokens stored only after OTP/setup verify. |
 | Logout                     | Implemented                          | Profile menu → `useAuthController.handleLogout()` → `POST /auth/logout`, `clearAuthSession()`, Reverb disconnect, `navigate('/login')`.                                                                                                                                                                                                                                                                                            |
 | Register                   | **UI-only**                          | `AuthRegister.jsx` is a static form; no API call is wired.                                                                                                                                                                                                                                                                                                                                                                         |
 | Dashboard                  | Implemented (template)               | Demo charts & cards.                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -124,9 +124,11 @@ The frontend talks to the Laravel API in `backend-laravel-v1`. The relationship 
 
 - **Base URL:** `import.meta.env.VITE_API_BASE_URL` (default `http://localhost:8000/api`).
 - **Web Push VAPID public key:** `import.meta.env.VITE_VAPID_PUBLIC_KEY` (URL-safe base64; must match backend `VAPID_PUBLIC_KEY`). **Private key stays on the server only.**
-- **Auth scheme:** JWT bearer token (`Authorization: Bearer <token>`). **M2/M4:** `utils/auth.js` keeps an in-memory token cache with `localStorage` persistence for route-guard reload support; setup-required login skips token/user persistence.
+- **Auth scheme:** JWT bearer token (`Authorization: Bearer <token>`) plus HttpOnly refresh cookie (M1). **M2/M5:** `utils/auth.js` keeps an in-memory token cache with `localStorage` persistence for route-guard reload support. Semi-public auth steps do not persist tokens until OTP or 2FA setup verification succeeds.
 - **Endpoints actually called from the frontend (non-exhaustive; see [Section 5](#5-api-integration)):**
-  - `POST /auth/login` (with legacy fallback to `POST /login` on 404) — login.
+  - `POST /auth/login` — credential validation; returns `next_step` branch (no token until OTP/setup verify).
+  - `POST /auth/password-setup/complete`, `POST /auth/2fa/setup/start`, `POST /auth/2fa/setup/verify`, `POST /auth/otp/verify` — M4/M5 auth steps (`skipAuthRefresh: true`).
+  - `POST /auth/refresh`, `POST /auth/logout` — session rotation and logout.
   - `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}`, `DELETE /users/{id}` — user CRUD.
   - Zone, patrol, checkpoint, and **PWA sync** endpoints — see Section 5 tables.
 
@@ -272,15 +274,23 @@ See [Section 4](#4-routing-documentation) for the full table.
    │  Page   │                       │ (fallback /login)│
    └────┬────┘                       └────────┬─────────┘
         │ 200 OK                              │
-        ├─ M4: next_step =                    │
-        │  password_setup_required            │
-        │  → /first-login/setup               │
-        │  (setup_token in route state only)  │
-        │                                     │
-        └─ access_token + user                │
-           localStorage + role home route      │
-                                              ▼
-   Subsequent API calls ──► Authorization: Bearer <JWT>
+        ├─ next_step = password_setup_required
+        │  → /first-login/setup (setup_token in route state only)
+        │
+        ├─ next_step = two_factor_setup_required
+        │  → /first-login/2fa (two_factor_setup_token in route state only)
+        │
+        ├─ next_step = otp_required
+        │  → /login/otp (login_challenge_id in route state only)
+        │
+        └─ (legacy/direct token path only if backend returns access_token)
+           setAuthToken + setAuthUser → role home route
+
+   /first-login/setup complete → /first-login/2fa
+   /first-login/2fa verify success → access_token + HttpOnly refresh cookie
+   /login/otp verify success → access_token + HttpOnly refresh cookie
+
+   Subsequent API calls ──► Authorization: Bearer <JWT> + credentials: include
                                 │
                   ┌─────────────┴─────────────┐
                   │                           │
@@ -288,7 +298,7 @@ See [Section 4](#4-routing-documentation) for the full table.
               200/2xx OK              401 Unauthorized (protected)
                   │                           │
                   ▼                           ▼
-           Render data         runAuthRefresh() → retry once
+           Render data         runAuthRefresh() → retry once (M2)
                                               │
                               refresh failure or retried 401
                                               ▼
@@ -360,7 +370,7 @@ frontend-react-v1/
 
 | File      | Purpose                                                                                                                                                                                                                                                                                                                                                    |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api.js`  | Centralized `fetch` wrapper. Builds headers (`Accept: application/json`, optional `Authorization: Bearer <token>`, JSON content-type unless `FormData`). Sends `credentials: 'include'` for HttpOnly refresh-cookie support (M1). On `401`, calls shared refresh queue (`authRefreshQueue.js`), retries the original request once, and only clears session when refresh fails (M2). Auth paths (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`, `/auth/password-setup/complete`) and `{ skipAuthRefresh: true }` bypass refresh. Throws on non-2xx with `error.status` and `error.data`. Session-expired dialog via `auth:session-expired` event. Reads base URL from `VITE_API_BASE_URL` (fallback `http://localhost:8000/api`). See [`backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md`](../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md). |
+| `api.js`  | Centralized `fetch` wrapper. Builds headers (`Accept: application/json`, optional `Authorization: Bearer <token>`, JSON content-type unless `FormData`). Sends `credentials: 'include'` for HttpOnly refresh-cookie support (M1). On `401`, calls shared refresh queue (`authRefreshQueue.js`), retries the original request once, and only clears session when refresh fails (M2). Auth paths (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`, `/auth/password-setup/complete`, `/auth/2fa/setup/start`, `/auth/2fa/setup/verify`, `/auth/otp/verify`) and `{ skipAuthRefresh: true }` bypass refresh. Throws on non-2xx with `error.status` and `error.data`. Session-expired dialog via `auth:session-expired` event. Reads base URL from `VITE_API_BASE_URL` (fallback `http://localhost:8000/api`). See [`backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md`](../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md). |
 | `authRefreshQueue.js` | **M2** — deduplicates concurrent refresh calls; exports `runAuthRefresh()`. |
 | `menu.js` | Tiny SWR-based store for `isDashboardDrawerOpened`. Exposes `useGetMenuMaster()` (read) and `handlerDrawerOpen(value)` (write via `mutate`). Despite the file path, **no remote call is made** — the SWR fetcher just returns the initial state.                                                                                                           |
 
@@ -576,8 +586,10 @@ Defined in `src/routes/AuthenticationRoutes.jsx`. Wrapped in `GuestRoute` — au
 
 | Path              | Component                             | Layout          | Purpose                                                    |
 | ----------------- | ------------------------------------- | --------------- | ---------------------------------------------------------- |
-| `/login`          | `views/pages/authentication/Login`    | `MinimalLayout` | JWT login form.                                            |
+| `/login`          | `views/pages/authentication/Login`    | `MinimalLayout` | Email/password login; branches to setup/2FA/OTP routes.    |
 | `/first-login/setup` | `feature/authentication/views/FirstLoginSetup` | `MinimalLayout` | **M4** — first-login password setup (setup token via route state only). |
+| `/first-login/2fa` | `feature/authentication/views/SetupTwoFactor` | `MinimalLayout` | **M5** — mandatory TOTP enrollment (setup token via route state only; local QR via `qrcode.react`). |
+| `/login/otp`      | `feature/authentication/views/VerifyOtp` | `MinimalLayout` | **M5** — login OTP challenge (challenge ID via route state only). |
 | `/pages/login`    | _redirect_                            | `MinimalLayout` | `<Navigate to="/login" replace />` (legacy compatibility). |
 | `/pages/register` | `views/pages/authentication/Register` | `MinimalLayout` | Static register page (UI only).                            |
 
@@ -638,11 +650,11 @@ Seeded backend roles: **Admin**, **Security Operator**, **Guard**.
 | **Security Operator** | `/admin/patrol-monitoring` (+ session detail), `/admin/anpr-monitoring` (+ event detail), `/patrol`                   | Operator → **Patrol Monitoring** (`IconMapPin2`), **ANPR Monitoring** (`IconCar`) + Patrol Home                         | `/admin/patrol-monitoring` |
 | **Guard**             | `/patrol` (no patrol monitoring)                                         | Guard → Patrol                                                                         | `/patrol`                  |
 
-**Utilities:** `src/utils/auth.js` — `getAuthUser()`, `getAuthUserRole()`, `hasRole()`, `hasAnyRole()`, `ALL_ROLES`, `getDefaultRouteForRole()`, `validateAuthSession()`, `clearAuthSession()` (clears `access_token` + `auth_user`).
+**Utilities:** `src/utils/auth.js` — `getAuthUser()`, `getAuthUserRole()`, `hasRole()`, `hasAnyRole()`, `ALL_ROLES`, `getDefaultRouteForRole()`, `validateAuthSession()`, `isAuthUserTwoFactorEnabled()`, `clearAuthSession()` (clears `access_token` + `auth_user`).
 
 **Role resolution** supports `auth_user.role.name`, `auth_user.role` (string), and `auth_user.role_name`.
 
-**Invalid session:** token without parseable `auth_user` → `clearAuthSession()` → `/login`.
+**Invalid session:** token without parseable `auth_user`, `setup_required = true`, or `two_factor_enabled = false` → `clearAuthSession()` → `/login`.
 
 ### Route Guards
 
@@ -650,19 +662,22 @@ Guards live in `src/routes/guards/`.
 
 #### `ProtectedRoute`
 
-Wraps `MainLayout` — requires valid JWT **and** `auth_user` in `localStorage` (`validateAuthSession()`).
+Wraps `MainLayout` — requires valid JWT, parseable `auth_user`, `setup_required !== true`, and `two_factor_enabled !== false` (`validateAuthSession()`).
 
 #### `RoleProtectedRoute`
 
 Props: `allowedRoles` (array), `children`.
 
 - No token → `/login`
-- Token without `auth_user` → `clearAuthSession()` → `/login`
+- `setup_required = true` → `clearAuthSession()` → `/login` (`state.setupRequired = true`)
+- `two_factor_enabled = false` → `clearAuthSession()` → `/login` (`state.twoFactorRequired = true`)
+- Invalid `auth_user` / session → `clearAuthSession()` → `/login`
+- Role missing → `clearAuthSession()` → `/login`
 - Role not in `allowedRoles` → `/forbidden`
 
 #### `RoleHomeRedirect`
 
-`/` index route — sends authenticated users to `getDefaultRouteForRole()`.
+`/` index route — sends authenticated users to `getDefaultRouteForRole()`. Uses `validateAuthSession()`, which rejects incomplete setup and incomplete 2FA.
 
 #### `GuestRoute`
 
@@ -798,9 +813,9 @@ Laravel **`ZoneController@index`** returns **`{ success, message, data }`** wher
 
 ### Authentication Token Handling
 
-- Token is stored in `localStorage` under the key `access_token` (`utils/auth.js#AUTH_TOKEN_KEY`).
+- Token is stored in `localStorage` under the key `access_token` (`utils/auth.js#AUTH_TOKEN_KEY`) **after successful OTP or 2FA setup verification**.
 - Every request automatically attaches the token via `buildHeaders` if present.
-- The frontend additionally stores the user object under `auth_user` (set by `AuthLogin` after login).
+- The frontend stores the user object under `auth_user` after session completion (OTP/setup verify or legacy direct login).
 
 ### Request / Response Interceptors
 
@@ -832,6 +847,12 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 | ----------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
 | `AuthLogin` (primary)                           | `POST`   | `/auth/login`                                                                                             |
 | `AuthLogin` (legacy fallback on 404)            | `POST`   | `/login`                                                                                                  |
+| `authService.completePasswordSetup`             | `POST`   | `/auth/password-setup/complete`                                                                           |
+| `authService.startTwoFactorSetup`               | `POST`   | `/auth/2fa/setup/start`                                                                                   |
+| `authService.verifyTwoFactorSetup`              | `POST`   | `/auth/2fa/setup/verify`                                                                                  |
+| `authService.verifyOtp`                         | `POST`   | `/auth/otp/verify`                                                                                        |
+| `authService.refresh`                           | `POST`   | `/auth/refresh` (direct `fetch`, not `api.js`)                                                            |
+| `authService.logout`                            | `POST`   | `/auth/logout`                                                                                            |
 | `userService.getAllUsers`                       | `GET`    | `/users`                                                                                                  |
 | `userService.getUserById`                       | `GET`    | `/users/{id}`                                                                                             |
 | `userService.createUser`                        | `POST`   | `/users`                                                                                                  |
@@ -864,8 +885,8 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 
 ### Frontend ↔ Laravel Communication
 
-- Token comes back as `data.access_token` from the login response (matches the documented Laravel JWT contract).
-- All subsequent calls send `Authorization: Bearer <token>`.
+- Token comes back as `data.access_token` from **OTP verify** or **2FA setup verify** responses (not from email/password login for M5 users).
+- All subsequent calls send `Authorization: Bearer <token>` and `credentials: 'include'` for the HttpOnly refresh cookie.
 - `Content-Type` is `application/json` for non-`FormData` requests; the backend Laravel API is JSON-first.
 - The frontend assumes Laravel-style validation responses (`data.errors` or `errors` keyed by field with array of messages) when extracting login error messages.
 
@@ -879,7 +900,9 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 
 **Login Module M2 (frontend refresh-on-401):** Protected API `401` responses trigger `runAuthRefresh()` → `POST /auth/refresh` → access-token update → single retry. See [`../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md`](../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md).
 
-**Login Module M4 (first-login password setup):** Setup-required login returns `next_step=password_setup_required` without storing JWT; first-login setup at `/first-login/setup`. See [`../backend-laravel-v1/docs/login/m4-first-login-password-setup.md`](../backend-laravel-v1/docs/login/m4-first-login-password-setup.md). Mandatory TOTP is deferred to M5.
+**Login Module M4 (first-login password setup):** Setup-required login returns `next_step=password_setup_required` without storing JWT; first-login setup at `/first-login/setup`. See [`../backend-laravel-v1/docs/login/m4-first-login-password-setup.md`](../backend-laravel-v1/docs/login/m4-first-login-password-setup.md).
+
+**Login Module M5 (mandatory TOTP 2FA):** Login branches to `two_factor_setup_required` or `otp_required`; setup at `/first-login/2fa`, OTP at `/login/otp`. Tokens issued only after verify. See [`../backend-laravel-v1/docs/login/m5-totp-two-factor-authentication.md`](../backend-laravel-v1/docs/login/m5-totp-two-factor-authentication.md).
 
 ### Login Flow
 
@@ -889,36 +912,20 @@ Implemented in `src/views/pages/auth-forms/AuthLogin.jsx`.
 2. Client-side validation:
    - Email is required and must match `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`.
    - Password is required (no length/complexity rule).
-3. `submitLogin(payload)`:
-   - First tries `POST /auth/login`.
-   - If the call throws `error.status === 404`, retries `POST /login` (legacy; current Laravel backend exposes only `/auth/login`).
-4. On success, the response is unpacked as:
+3. `submitLogin(payload)` calls `POST /auth/login` with `skipAuthRefresh: true` (legacy `/login` fallback on 404).
+4. On success, unpack `response?.data?.data` and branch on `next_step`:
 
-   ```js
-   const responseData = response?.data?.data || {};
-   ```
+   | `next_step` | Action |
+   |-------------|--------|
+   | `password_setup_required` | Navigate to `/first-login/setup` with `setupToken`, `email`, `expiresIn` in route state. Do **not** persist token/user. |
+   | `two_factor_setup_required` | Navigate to `/first-login/2fa` with `twoFactorSetupToken`, `email`, `expiresIn` in route state. Do **not** persist token/user. |
+   | `otp_required` | Navigate to `/login/otp` with `loginChallengeId`, `email`, `expiresIn` in route state. Do **not** persist token/user. |
+   | (direct `access_token`) | Legacy path: `setAuthToken()` + `setAuthUser()` → role home route. |
 
-   **M4 — setup required:** If `responseData.next_step === 'password_setup_required'`, navigate to `/first-login/setup` with `setupToken`, `email`, and `expiresIn` in route state. Do **not** call `setAuthToken()` or `setAuthUser()`.
+5. **Password setup complete** (`usePasswordSetupController`) navigates to `/first-login/2fa` with `twoFactorSetupToken` in route state.
+6. **2FA setup verify** (`useTwoFactorSetupController`) and **login OTP verify** (`useOtpController`) call the respective auth endpoints; on success call `setAuthToken()` + `setAuthUser()` and navigate to `getDefaultRouteForRole()`.
 
-   **Normal login:**
-
-   ```js
-   const token = responseData.access_token;
-   const user = responseData.user;
-   ```
-
-5. For normal login, the token must be present, otherwise the form throws `'Missing access token from login response.'`.
-6. `setAuthToken(token)` writes `access_token` to `localStorage`.
-7. If a user object exists, it is also persisted: `localStorage.setItem('auth_user', JSON.stringify(user))`.
-8. Navigation: `navigate(getDefaultRouteForRole(role), { replace: true })`.
-
-On failure, `extractErrorMessage(error)` produces a user-facing message:
-
-- First validation error from `error.data.data.errors` or `error.data.errors`.
-- Otherwise `error.data.message`.
-- Otherwise `'Login failed. Please try again.'`.
-
-If the error status is `401`, the password input is cleared.
+On failure, `extractErrorMessage(error)` produces a user-facing message. If status is `401`, the password input is cleared.
 
 ### Logout Flow
 
@@ -965,9 +972,13 @@ Centralizing the key avoids duplicated `localStorage.getItem('access_token')` ca
 
 M2 implements frontend refresh-on-401. When a protected API request returns `401`, `api.js` calls `runAuthRefresh()`, which uses `POST /auth/refresh` with `credentials: 'include'`. If refresh succeeds, the access token is updated and the original request is retried once. If refresh fails, the frontend clears auth state, marks the session-expired flag, redirects to `/login`, and shows `SessionExpiredDialog`.
 
-Auth endpoints (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`, `/auth/password-setup/complete`) and requests using `skipAuthRefresh: true` bypass refresh-on-401.
+Auth endpoints (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`, `/auth/password-setup/complete`, `/auth/2fa/setup/start`, `/auth/2fa/setup/verify`, `/auth/otp/verify`) and requests using `skipAuthRefresh: true` bypass refresh-on-401.
 
-**M4 setup tokens:** One-time password setup tokens from login or admin create are held in React Router location state only — never `localStorage` or `sessionStorage`. Setup-required login does not call `setAuthToken()` or `setAuthUser()`.
+**M4/M5 semi-public tokens:** Password setup tokens, 2FA setup tokens, and login challenge IDs are held in React Router location state only — never `localStorage` or `sessionStorage`. Email/password login and semi-public auth steps do not call `setAuthToken()` or `setAuthUser()` until OTP or 2FA setup verification succeeds.
+
+**M5 QR rendering:** `qrcode.react` renders the authenticator QR locally from `otpauth_uri`; no external QR API is used.
+
+**Route guards:** `ProtectedRoute` and `RoleProtectedRoute` clear sessions when stored `auth_user` has `setup_required = true` or `two_factor_enabled = false`.
 
 The refresh token remains browser-managed through an HttpOnly cookie and is never read or stored by JavaScript.
 

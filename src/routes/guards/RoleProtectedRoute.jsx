@@ -1,7 +1,7 @@
 import PropTypes from 'prop-types';
 import { Navigate, useLocation } from 'react-router-dom';
 
-import { clearAuthSession, getAuthUserRole, hasAnyRole, hasAuthToken, isAuthUserSetupRequired, validateAuthSession } from 'utils/auth';
+import { clearAuthSession, getAuthUserRole, hasAnyRole, hasAuthToken, isAuthUserSetupRequired, isAuthUserTwoFactorEnabled, validateAuthSession } from 'utils/auth';
 
 export default function RoleProtectedRoute({ allowedRoles, children }) {
   const location = useLocation();
@@ -13,6 +13,11 @@ export default function RoleProtectedRoute({ allowedRoles, children }) {
   if (isAuthUserSetupRequired()) {
     clearAuthSession();
     return <Navigate to="/login" replace state={{ from: location, setupRequired: true }} />;
+  }
+
+  if (!isAuthUserTwoFactorEnabled()) {
+    clearAuthSession();
+    return <Navigate to="/login" replace state={{ from: location, twoFactorRequired: true }} />;
   }
 
   if (!validateAuthSession()) {
