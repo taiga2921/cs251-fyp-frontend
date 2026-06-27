@@ -32,10 +32,12 @@ export default function AuthMonitoringDashboard() {
       <Stack spacing={2}>
         <Tabs value={tab} onChange={(_, value) => setTab(value)}>
           <Tab label="Audit Logs" />
-          <Tab label="Active Sessions" />
+          <Tab label="Sessions" />
         </Tabs>
 
-        {tab === 0 && <AuthAuditFilterBar filters={auditController.filters} onChange={auditController.setFilters} />}
+        {tab === 0 && (
+          <AuthAuditFilterBar filters={auditController.filters} onChange={auditController.updateFilters} />
+        )}
 
         {activeController.error && <Alert severity="error">{activeController.error}</Alert>}
 

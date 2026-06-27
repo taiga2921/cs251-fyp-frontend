@@ -25,6 +25,11 @@ export const useAuthAuditLogController = (repository) => {
     };
   }, []);
 
+  const updateFilters = useCallback((nextFilters) => {
+    setPage(0);
+    setFilters(nextFilters);
+  }, []);
+
   const loadLogs = useCallback(async () => {
     try {
       setLoading(true);
@@ -56,6 +61,7 @@ export const useAuthAuditLogController = (repository) => {
     loading,
     error,
     setFilters,
+    updateFilters,
     setPage,
     setRowsPerPage,
     reload: loadLogs
