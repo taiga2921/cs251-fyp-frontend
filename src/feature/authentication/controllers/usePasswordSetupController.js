@@ -86,11 +86,12 @@ export default function usePasswordSetupController() {
         setPassword('');
         setPasswordConfirmation('');
 
-        navigate('/login', {
+        navigate('/first-login/2fa', {
           replace: true,
           state: {
-            passwordSetupComplete: true,
-            nextStep: result.nextStep || 'two_factor_setup_required'
+            twoFactorSetupToken: result.twoFactorSetupToken,
+            email: result.user?.email || email,
+            expiresIn: result.expiresIn
           }
         });
       } catch (error) {

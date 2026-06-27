@@ -150,7 +150,23 @@ export function validateAuthSession() {
     return false;
   }
 
+  if (user.two_factor_enabled === false) {
+    return false;
+  }
+
   return true;
+}
+
+export function isAuthUserTwoFactorEnabled() {
+  const user = getAuthUser();
+  if (!user) {
+    return false;
+  }
+  return user.two_factor_enabled !== false;
+}
+
+export function isAuthUserFullyInitialized() {
+  return validateAuthSession();
 }
 
 export function isAuthUserSetupRequired() {

@@ -10,6 +10,8 @@ import GuestRoute from './guards/GuestRoute';
 const LoginPage = Loadable(lazy(() => import('views/pages/authentication/Login')));
 const RegisterPage = Loadable(lazy(() => import('views/pages/authentication/Register')));
 const FirstLoginSetupPage = Loadable(lazy(() => import('feature/authentication/views/FirstLoginSetup')));
+const SetupTwoFactorPage = Loadable(lazy(() => import('feature/authentication/views/SetupTwoFactor')));
+const VerifyOtpPage = Loadable(lazy(() => import('feature/authentication/views/VerifyOtp')));
 
 // ==============================|| AUTHENTICATION ROUTING ||============================== //
 
@@ -28,6 +30,14 @@ const AuthenticationRoutes = {
     {
       path: 'first-login/setup',
       element: <FirstLoginSetupPage />
+    },
+    {
+      path: 'first-login/2fa',
+      element: <SetupTwoFactorPage />
+    },
+    {
+      path: 'login/otp',
+      element: <VerifyOtpPage />
     },
     {
       path: 'pages/login',

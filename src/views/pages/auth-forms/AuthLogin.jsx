@@ -82,13 +82,29 @@ export default function AuthLogin() {
 
   const submitLogin = async (payload) => {
     try {
-      return await api.post('/auth/login', payload);
+      return await api.post('/auth/login', payload, { skipAuthRefresh: true });
     } catch (error) {
       if (error?.status === 404) {
-        return api.post('/login', payload);
+        return api.post('/login', payload, { skipAuthRefresh: true });
       }
       throw error;
     }
+  };
+
+  const completeLoginSession = (responseData) => {
+    const token = responseData.access_token;
+    const user = responseData.user;
+
+    if (!token) {
+      throw new Error('Missing access token from login response.');
+    }
+
+    setAuthToken(token);
+    if (user) {
+      setAuthUser(user);
+    }
+    const role = responseData.role || getAuthUserRole();
+    navigate(getDefaultRouteForRole(role), { replace: true });
   };
 
   const handleSubmit = async (event) => {
@@ -116,19 +132,31 @@ export default function AuthLogin() {
         return;
       }
 
-      const token = responseData.access_token;
-      const user = responseData.user;
-
-      if (!token) {
-        throw new Error('Missing access token from login response.');
+      if (responseData.next_step === 'two_factor_setup_required') {
+        navigate('/first-login/2fa', {
+          replace: true,
+          state: {
+            twoFactorSetupToken: responseData.two_factor_setup_token,
+            email: responseData.user?.email || email.trim(),
+            expiresIn: responseData.expires_in
+          }
+        });
+        return;
       }
 
-      setAuthToken(token);
-      if (user) {
-        setAuthUser(user);
+      if (responseData.next_step === 'otp_required') {
+        navigate('/login/otp', {
+          replace: true,
+          state: {
+            loginChallengeId: responseData.login_challenge_id,
+            email: responseData.user?.email || email.trim(),
+            expiresIn: responseData.expires_in
+          }
+        });
+        return;
       }
-      const role = getAuthUserRole();
-      navigate(getDefaultRouteForRole(role), { replace: true });
+
+      completeLoginSession(responseData);
     } catch (error) {
       const message = extractErrorMessage(error);
       setSubmitError(message);
@@ -191,19 +219,6 @@ export default function AuthLogin() {
         {errors.password && <FormHelperText error>{errors.password}</FormHelperText>}
       </CustomFormControl>
 
-      {/* <Grid container sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-        <Grid>
-          <FormControlLabel
-            control={<Checkbox checked={checked} onChange={(event) => setChecked(event.target.checked)} name="checked" color="primary" />}
-            label="Keep me logged in"
-          />
-        </Grid>
-        <Grid>
-          <Typography variant="subtitle1" component={Link} to="#!" sx={{ textDecoration: 'none', color: 'secondary.main' }}>
-            Forgot Password?
-          </Typography>
-        </Grid>
-      </Grid> */}
       {submitError && (
         <Box sx={{ mt: 1 }}>
           <FormHelperText error>{submitError}</FormHelperText>

@@ -66,6 +66,8 @@ describe('authService.completePasswordSetup', () => {
         success: true,
         data: {
           next_step: 'two_factor_setup_required',
+          two_factor_setup_token: '2fa-token',
+          expires_in: 600,
           user: { email: 'user@example.com' }
         }
       }
@@ -88,6 +90,81 @@ describe('authService.completePasswordSetup', () => {
       { skipAuthRefresh: true }
     );
     expect(result.nextStep).toBe('two_factor_setup_required');
+    expect(result.twoFactorSetupToken).toBe('2fa-token');
+  });
+});
+
+describe('authService two-factor and OTP endpoints', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('calls 2FA setup endpoints with skipAuthRefresh', async () => {
+    const api = (await import('api/api')).default;
+    vi.mocked(api.post)
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          data: {
+            next_step: 'two_factor_setup_verify_required',
+            manual_key: 'BASE32SECRET',
+            otpauth_uri: 'otpauth://totp/test',
+            expires_in: 600
+          }
+        }
+      })
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          data: {
+            access_token: 'jwt-token',
+            token_type: 'bearer',
+            expires_in: 1800,
+            role: 'Guard',
+            user: { id: '1', email: 'user@example.com' }
+          }
+        }
+      });
+
+    const authService = (await import('./authService')).default;
+
+    const startResult = await authService.startTwoFactorSetup({ two_factor_setup_token: 'setup-token' });
+    expect(api.post).toHaveBeenCalledWith('/auth/2fa/setup/start', { two_factor_setup_token: 'setup-token' }, { skipAuthRefresh: true });
+    expect(startResult.manualKey).toBe('BASE32SECRET');
+
+    const verifyResult = await authService.verifyTwoFactorSetup({ two_factor_setup_token: 'setup-token', otp: '123456' });
+    expect(api.post).toHaveBeenCalledWith(
+      '/auth/2fa/setup/verify',
+      { two_factor_setup_token: 'setup-token', otp: '123456' },
+      { skipAuthRefresh: true }
+    );
+    expect(verifyResult.accessToken).toBe('jwt-token');
+  });
+
+  it('calls OTP verify endpoint with skipAuthRefresh', async () => {
+    const api = (await import('api/api')).default;
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          access_token: 'jwt-token',
+          token_type: 'bearer',
+          expires_in: 1800,
+          role: 'Guard',
+          user: { id: '1', email: 'user@example.com' }
+        }
+      }
+    });
+
+    const authService = (await import('./authService')).default;
+    const result = await authService.verifyOtp({ login_challenge_id: 'challenge-123', otp: '123456' });
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/auth/otp/verify',
+      { login_challenge_id: 'challenge-123', otp: '123456' },
+      { skipAuthRefresh: true }
+    );
+    expect(result.accessToken).toBe('jwt-token');
   });
 });
 

@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import AuthLogin from './AuthLogin';
-import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from 'utils/auth';
+import { AUTH_TOKEN_KEY, AUTH_USER_KEY, setAuthToken } from 'utils/auth';
 
 const mockNavigate = vi.fn();
 
@@ -24,7 +24,7 @@ vi.mock('api/api', () => ({
 
 import api from 'api/api';
 
-describe('AuthLogin password setup routing', () => {
+describe('AuthLogin auth routing', () => {
   beforeEach(() => {
     localStorage.clear();
     mockNavigate.mockReset();
@@ -67,5 +67,144 @@ describe('AuthLogin password setup routing', () => {
 
     expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
     expect(localStorage.getItem(AUTH_USER_KEY)).toBeNull();
+  });
+
+  it('routes two_factor_setup_required login to first-login 2FA without storing access token', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          next_step: 'two_factor_setup_required',
+          two_factor_setup_token: '2fa-token-abc',
+          expires_in: 600,
+          user: { email: 'user@example.com', setup_required: false, two_factor_enabled: false }
+        }
+      }
+    });
+
+    render(
+      <MemoryRouter>
+        <AuthLogin />
+      </MemoryRouter>
+    );
+
+    await userEvent.type(screen.getByLabelText(/email address/i), 'user@example.com');
+    await userEvent.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/first-login/2fa', {
+        replace: true,
+        state: {
+          twoFactorSetupToken: '2fa-token-abc',
+          email: 'user@example.com',
+          expiresIn: 600
+        }
+      });
+    });
+
+    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem(AUTH_USER_KEY)).toBeNull();
+  });
+
+  it('routes otp_required login to login OTP without storing access token', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          next_step: 'otp_required',
+          login_challenge_id: 'challenge-123',
+          expires_in: 300,
+          user: { email: 'user@example.com' }
+        }
+      }
+    });
+
+    render(
+      <MemoryRouter>
+        <AuthLogin />
+      </MemoryRouter>
+    );
+
+    await userEvent.type(screen.getByLabelText(/email address/i), 'user@example.com');
+    await userEvent.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/login/otp', {
+        replace: true,
+        state: {
+          loginChallengeId: 'challenge-123',
+          email: 'user@example.com',
+          expiresIn: 300
+        }
+      });
+    });
+
+    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem(AUTH_USER_KEY)).toBeNull();
+  });
+
+  it('stores access token and navigates on direct login success', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          access_token: 'jwt-token',
+          token_type: 'bearer',
+          expires_in: 1800,
+          role: 'Guard',
+          user: { id: '1', email: 'guard@example.com', two_factor_enabled: true }
+        }
+      }
+    });
+
+    render(
+      <MemoryRouter>
+        <AuthLogin />
+      </MemoryRouter>
+    );
+
+    await userEvent.type(screen.getByLabelText(/email address/i), 'guard@example.com');
+    await userEvent.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBe('jwt-token');
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith('/patrol', { replace: true });
+  });
+
+  it('calls login with skipAuthRefresh', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          next_step: 'otp_required',
+          login_challenge_id: 'challenge-123',
+          expires_in: 300,
+          user: { email: 'user@example.com' }
+        }
+      }
+    });
+
+    render(
+      <MemoryRouter>
+        <AuthLogin />
+      </MemoryRouter>
+    );
+
+    await userEvent.type(screen.getByLabelText(/email address/i), 'user@example.com');
+    await userEvent.type(screen.getByLabelText(/^password$/i), 'Password123!');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith(
+        '/auth/login',
+        { email: 'user@example.com', password: 'Password123!' },
+        { skipAuthRefresh: true }
+      );
+    });
   });
 });

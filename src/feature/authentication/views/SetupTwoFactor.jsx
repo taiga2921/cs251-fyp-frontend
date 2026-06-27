@@ -1,25 +1,20 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import useMediaQuery from '@mui/material/useMediaQuery';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-import Alert from '@mui/material/Alert';
 
-// project imports
-import AuthWrapper1 from './AuthWrapper1';
-import AuthCardWrapper from './AuthCardWrapper';
-
+import AuthWrapper1 from 'views/pages/authentication/AuthWrapper1';
+import AuthCardWrapper from 'views/pages/authentication/AuthCardWrapper';
 import Logo from 'ui-component/Logo';
 import AuthFooter from 'ui-component/cards/AuthFooter';
-import AuthLogin from '../auth-forms/AuthLogin';
+import TwoFactorSetupCard from 'feature/authentication/components/TwoFactorSetupCard';
+import useTwoFactorSetupController from 'feature/authentication/controllers/useTwoFactorSetupController';
 
-// ================================|| AUTH3 - LOGIN ||================================ //
-
-export default function Login() {
+export default function SetupTwoFactor() {
   const downMD = useMediaQuery((theme) => theme.breakpoints.down('md'));
-  const location = useLocation();
-  const twoFactorRequired = location.state?.twoFactorRequired;
+  const controller = useTwoFactorSetupController();
 
   return (
     <AuthWrapper1>
@@ -35,19 +30,27 @@ export default function Login() {
                 </Box>
                 <Stack sx={{ alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                   <Typography variant={downMD ? 'h3' : 'h2'} sx={{ color: 'secondary.main' }}>
-                    Hi, Welcome Back
+                    Set up two-factor authentication
                   </Typography>
                   <Typography variant="caption" sx={{ fontSize: '16px', textAlign: { xs: 'center', md: 'inherit' } }}>
-                    Enter your credentials to continue
+                    Use an authenticator app to secure your account
                   </Typography>
                 </Stack>
-                {twoFactorRequired ? (
-                  <Alert severity="info" sx={{ width: 1 }}>
-                    Two-factor authentication setup is required before you can access the application.
-                  </Alert>
-                ) : null}
                 <Box sx={{ width: 1 }}>
-                  <AuthLogin />
+                  <TwoFactorSetupCard
+                    email={controller.email}
+                    manualKey={controller.manualKey}
+                    otpauthUri={controller.otpauthUri}
+                    otp={controller.otp}
+                    setOtp={controller.setOtp}
+                    submitError={controller.submitError}
+                    startError={controller.startError}
+                    isStarting={controller.isStarting}
+                    isSubmitting={controller.isSubmitting}
+                    missingSetupContext={controller.missingSetupContext}
+                    setupReady={controller.setupReady}
+                    onSubmit={controller.handleSubmit}
+                  />
                 </Box>
               </Stack>
             </AuthCardWrapper>

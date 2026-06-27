@@ -54,6 +54,8 @@ describe('usePasswordSetupController', () => {
   it('submits setup token and new password without persisting setup token', async () => {
     mockCompletePasswordSetup.mockResolvedValue({
       nextStep: 'two_factor_setup_required',
+      twoFactorSetupToken: '2fa-setup-token',
+      expiresIn: 600,
       user: { email: 'user@example.com', setup_required: false }
     });
 
@@ -86,11 +88,12 @@ describe('usePasswordSetupController', () => {
 
     expect(localStorage.getItem('setup_token')).toBeNull();
     expect(sessionStorage.getItem('setup_token')).toBeNull();
-    expect(mockNavigate).toHaveBeenCalledWith('/login', {
+    expect(mockNavigate).toHaveBeenCalledWith('/first-login/2fa', {
       replace: true,
       state: {
-        passwordSetupComplete: true,
-        nextStep: 'two_factor_setup_required'
+        twoFactorSetupToken: '2fa-setup-token',
+        email: 'user@example.com',
+        expiresIn: 600
       }
     });
   });

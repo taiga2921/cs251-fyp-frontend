@@ -34,4 +34,29 @@ describe('ProtectedRoute setup-required guard', () => {
     expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
     expect(localStorage.getItem(AUTH_USER_KEY)).toBeNull();
   });
+
+  it('redirects users without completed 2FA to login and clears session', () => {
+    setAuthToken('jwt-token');
+    setAuthUser({ id: '1', email: 'user@example.com', setup_required: false, two_factor_enabled: false });
+
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <Routes>
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <div>Protected content</div>
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/login" element={<div>Login page</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Login page')).toBeInTheDocument();
+    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem(AUTH_USER_KEY)).toBeNull();
+  });
 });

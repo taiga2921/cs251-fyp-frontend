@@ -1,7 +1,7 @@
 import PropTypes from 'prop-types';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
-import { clearAuthSession, hasAuthToken, isAuthUserSetupRequired, validateAuthSession } from 'utils/auth';
+import { clearAuthSession, hasAuthToken, isAuthUserSetupRequired, isAuthUserTwoFactorEnabled, validateAuthSession } from 'utils/auth';
 
 export default function ProtectedRoute({ children }) {
   const location = useLocation();
@@ -13,6 +13,11 @@ export default function ProtectedRoute({ children }) {
   if (isAuthUserSetupRequired()) {
     clearAuthSession();
     return <Navigate to="/login" replace state={{ from: location, setupRequired: true }} />;
+  }
+
+  if (!isAuthUserTwoFactorEnabled()) {
+    clearAuthSession();
+    return <Navigate to="/login" replace state={{ from: location, twoFactorRequired: true }} />;
   }
 
   if (!validateAuthSession()) {

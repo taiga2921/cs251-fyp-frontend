@@ -29,4 +29,31 @@ export class AuthRepository {
       throw error;
     }
   }
+
+  async startTwoFactorSetup(payload) {
+    try {
+      return await this.dataSource.startTwoFactorSetup(payload);
+    } catch (error) {
+      console.error('Error during two-factor setup start:', error);
+      throw error;
+    }
+  }
+
+  async verifyTwoFactorSetup(payload) {
+    try {
+      return await this.dataSource.verifyTwoFactorSetup(payload);
+    } catch (error) {
+      console.error('Error during two-factor setup verify:', error);
+      throw error;
+    }
+  }
+
+  async verifyOtp(payload) {
+    try {
+      return await this.dataSource.verifyOtp(payload);
+    } catch (error) {
+      console.error('Error during OTP verification:', error);
+      throw error;
+    }
+  }
 }

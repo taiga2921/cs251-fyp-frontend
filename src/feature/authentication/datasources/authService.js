@@ -15,6 +15,7 @@ export function normalizeRefreshResponse(body) {
     user: payload?.user ?? null,
     tokenType: payload?.token_type ?? null,
     expiresIn: payload?.expires_in ?? null,
+    role: payload?.role ?? null,
     raw: body
   };
 }
@@ -27,7 +28,40 @@ export function normalizePasswordSetupResponse(body) {
 
   return {
     nextStep: payload?.next_step ?? null,
+    twoFactorSetupToken: payload?.two_factor_setup_token ?? null,
+    expiresIn: payload?.expires_in ?? null,
     user: payload?.user ?? null,
+    raw: body
+  };
+}
+
+/**
+ * Normalize two-factor setup start payloads.
+ */
+export function normalizeTwoFactorSetupStartResponse(body) {
+  const payload = body?.data && typeof body.data === 'object' && body.data.next_step != null ? body.data : body;
+
+  return {
+    nextStep: payload?.next_step ?? null,
+    manualKey: payload?.manual_key ?? null,
+    otpauthUri: payload?.otpauth_uri ?? null,
+    expiresIn: payload?.expires_in ?? null,
+    raw: body
+  };
+}
+
+/**
+ * Normalize authenticated session payloads (2FA setup verify, OTP verify).
+ */
+export function normalizeAuthSessionResponse(body) {
+  const payload = body?.data && typeof body.data === 'object' && body.data.access_token != null ? body.data : body;
+
+  return {
+    accessToken: payload?.access_token ?? null,
+    user: payload?.user ?? null,
+    tokenType: payload?.token_type ?? null,
+    expiresIn: payload?.expires_in ?? null,
+    role: payload?.role ?? null,
     raw: body
   };
 }
@@ -86,12 +120,42 @@ const authService = {
   /**
    * Complete first-login password setup with a one-time setup token.
    * @param {{ setup_token: string, password: string, password_confirmation: string }} payload
-   * @returns {Promise<{ nextStep: string|null, user: object|null, raw: unknown }>}
+   * @returns {Promise<{ nextStep: string|null, twoFactorSetupToken: string|null, expiresIn: number|null, user: object|null, raw: unknown }>}
    */
   async completePasswordSetup(payload) {
     const response = await api.post('/auth/password-setup/complete', payload, { skipAuthRefresh: true });
     const body = extractResponsePayload(response);
     return normalizePasswordSetupResponse(body);
+  },
+
+  /**
+   * Begin TOTP setup for a short-lived setup token.
+   * @param {{ two_factor_setup_token: string }} payload
+   */
+  async startTwoFactorSetup(payload) {
+    const response = await api.post('/auth/2fa/setup/start', payload, { skipAuthRefresh: true });
+    const body = extractResponsePayload(response);
+    return normalizeTwoFactorSetupStartResponse(body);
+  },
+
+  /**
+   * Verify TOTP during first-login setup and obtain an authenticated session.
+   * @param {{ two_factor_setup_token: string, otp: string }} payload
+   */
+  async verifyTwoFactorSetup(payload) {
+    const response = await api.post('/auth/2fa/setup/verify', payload, { skipAuthRefresh: true });
+    const body = extractResponsePayload(response);
+    return normalizeAuthSessionResponse(body);
+  },
+
+  /**
+   * Verify OTP for a login challenge and obtain an authenticated session.
+   * @param {{ login_challenge_id: string, otp: string }} payload
+   */
+  async verifyOtp(payload) {
+    const response = await api.post('/auth/otp/verify', payload, { skipAuthRefresh: true });
+    const body = extractResponsePayload(response);
+    return normalizeAuthSessionResponse(body);
   }
 };
 

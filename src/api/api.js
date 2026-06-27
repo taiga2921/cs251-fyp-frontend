@@ -75,6 +75,14 @@ const request = async (method, url, data, options = {}, isRetry = false) => {
       throwStructuredError(response, responseData, 'Unauthorized');
     }
 
+    if (
+      path === '/auth/2fa/setup/start' ||
+      path === '/auth/2fa/setup/verify' ||
+      path === '/auth/otp/verify'
+    ) {
+      throwStructuredError(response, responseData, 'Unauthorized');
+    }
+
     if (options.skipAuthRefresh) {
       throwStructuredError(response, responseData, 'Unauthorized');
     }
