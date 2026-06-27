@@ -63,7 +63,7 @@ describe('api.js refresh-on-401', () => {
     expect(retryCall[1].headers.Authorization).toBe('Bearer fresh-token');
   });
 
-  it('invokes runAuthRefresh for each parallel 401 response', async () => {
+  it('routes each parallel 401 through the refresh queue and retries each request', async () => {
     const attemptByUrl = new Map();
 
     runAuthRefreshMock.mockImplementation(() => {

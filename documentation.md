@@ -165,7 +165,7 @@ The Laravel backend exposes **`POST /api/pwa/sync`** (JWT **`auth:api`**) for th
 │                                                         │
 │   Feature modules → controllers → repositories          │
 │   ↓                                                     │
-│   src/api/api.js (fetch wrapper, JWT, 401 redirect)     │
+│   src/api/api.js (fetch wrapper, JWT, M2 refresh-on-401)     │
 └────────────────────────────────────────────────────────┘
                           │
                           ▼
@@ -286,10 +286,14 @@ See [Section 4](#4-routing-documentation) for the full table.
                   ┌─────────────┴─────────────┐
                   │                           │
                   ▼                           ▼
-              200/2xx OK              401 Unauthorized
+              200/2xx OK              401 Unauthorized (protected)
                   │                           │
                   ▼                           ▼
-           Render data         clearAuthToken() + window.location.replace('/login')
+           Render data         runAuthRefresh() → retry once
+                                              │
+                              refresh failure or retried 401
+                                              ▼
+                              clearAuthSession() + session-expired UX + /login
 ```
 
 ### Data Flow Between Frontend and Backend
@@ -673,7 +677,7 @@ Authenticated visitors → role default route (not always `/dashboard`).
 | `/login` (with token) | `GuestRoute` → role default.                                |
 | Wrong role for route  | `RoleProtectedRoute` → `/forbidden`.                        |
 | `/pages/login`        | Always redirected to `/login`.                              |
-| API responds `401`    | `clearAuthSession()` + `window.location.replace('/login')`. |
+| API protected request responds `401` | Refresh-on-401 via `runAuthRefresh()` + retry once; refresh failure or retried `401` → clear auth state + session-expired UX + `/login`. |
 
 ### Unauthorized / Error Handling
 
@@ -720,7 +724,8 @@ Behavior of `request()`:
 3. **Response parsing**:
    - If `Content-Type` includes `application/json` → parse JSON; else `await response.text()`.
 4. **Error handling**:
-   - `401` → `clearAuthToken()` + redirect to `/login` (only if not already there). Throws `Error('Unauthorized')`.
+   - Protected `401` → `runAuthRefresh()` (shared queue) → retry original request once with updated token; refresh failure or retried `401` → `clearAuthSession()`, session-expired flag/dialog, redirect to `/login`.
+   - Auth paths (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`) and `{ skipAuthRefresh: true }` bypass refresh-on-401.
    - Other non-`ok` → throws `Error('API request failed')` with `error.status` and `error.data` attached.
 5. **Success return shape**: `{ data, status, headers }`.
 
@@ -802,13 +807,13 @@ Laravel **`ZoneController@index`** returns **`{ success, message, data }`** wher
 There are **no axios-style interceptors**. Equivalent behavior is implemented inline inside `request()`:
 
 - Pre-flight: `buildHeaders()` injects `Authorization`.
-- Post-flight: `401` handling, content-type sniffing, and structured error throwing.
+- Post-flight: protected `401` refresh-on-401 + single retry; content-type sniffing; structured error throwing.
 
 ### Error Handling Strategy
 
 | Layer                                  | Behavior                                                                                                                                                        |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api.js`                               | Throws on non-2xx; carries `status` + `data`. Handles `401` globally.                                                                                           |
+| `api.js`                               | Throws on non-2xx; carries `status` + `data`. Protected `401` → refresh-on-401 + single retry; refresh failure → session-expired UX + `/login`. |
 | Service (`userService`)                | Catches the low-level error, maps to a friendlier message, re-throws as a normalized `Error`.                                                                   |
 | Repository (`userRepository`)          | Logs to console and rethrows.                                                                                                                                   |
 | Controller (`useUserController`, etc.) | `try/catch` around repository calls. On error: `console.error` + `window.alert(...)`.                                                                           |
@@ -870,7 +875,9 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 
 **Login Module baseline (M0):** See [`../backend-laravel-v1/docs/login/m0-auth-baseline-and-current-audit.md`](../backend-laravel-v1/docs/login/m0-auth-baseline-and-current-audit.md) for the current JWT audit, protected API inventory, and migration path. Target design: [`../login-module.md`](../login-module.md).
 
-**Login Module M1 (refresh sessions):** Laravel now issues an HttpOnly refresh cookie on login and exposes `POST /api/auth/refresh`. The SPA sends `credentials: 'include'` on all API requests so the browser can store/send the cookie. `POST /api/auth/logout` is a **public** route: the backend revokes the refresh session from the HttpOnly cookie even when the JWT is missing or expired; the frontend still clears local state in `finally` regardless of network outcome. Refresh-on-401 retry is **not** implemented until M2 — see [`../backend-laravel-v1/docs/login/m1-laravel-session-foundation-and-refresh-tokens.md`](../backend-laravel-v1/docs/login/m1-laravel-session-foundation-and-refresh-tokens.md).
+**Login Module M1 (refresh sessions):** Laravel issues an HttpOnly refresh cookie on login and exposes `POST /api/auth/refresh`. The SPA sends `credentials: 'include'` on all API requests so the browser can store/send the cookie. `POST /api/auth/logout` is a **public** route: the backend revokes the refresh session from the HttpOnly cookie even when the JWT is missing or expired; the frontend still clears local state in `finally` regardless of network outcome. See [`../backend-laravel-v1/docs/login/m1-laravel-session-foundation-and-refresh-tokens.md`](../backend-laravel-v1/docs/login/m1-laravel-session-foundation-and-refresh-tokens.md).
+
+**Login Module M2 (frontend refresh-on-401):** Protected API `401` responses trigger `runAuthRefresh()` → `POST /auth/refresh` → access-token update → single retry. See [`../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md`](../backend-laravel-v1/docs/login/m2-frontend-refresh-on-401-architecture.md).
 
 ### Login Flow
 
@@ -894,7 +901,7 @@ Implemented in `src/views/pages/auth-forms/AuthLogin.jsx`.
 5. The token must be present, otherwise the form throws `'Missing access token from login response.'`.
 6. `setAuthToken(token)` writes `access_token` to `localStorage`.
 7. If a user object exists, it is also persisted: `localStorage.setItem('auth_user', JSON.stringify(user))`.
-8. Navigation: `navigate('/dashboard', { replace: true })`.
+8. Navigation: `navigate(getDefaultRouteForRole(role), { replace: true })`.
 
 On failure, `extractErrorMessage(error)` produces a user-facing message:
 
@@ -920,7 +927,7 @@ Implemented end-to-end from the header Profile menu using the same layered patte
    - `setCurrentUser(null)`.
    - `navigate('/login', { replace: true })`.
 
-**Backend failure tolerance:** Logout always returns **200** when the request reaches Laravel (M1 hardening patch): refresh revocation and cookie clearing succeed even without a bearer token or with an expired/invalid JWT. The frontend `finally` block still runs disconnect + `clearAuthSession()` + navigation. Network errors and non-`401` HTTP failures may set optional `logoutError`; `401` on other API calls still uses global `api.js` redirect behavior.
+**Backend failure tolerance:** Logout always returns **200** when the request reaches Laravel (M1 hardening patch): refresh revocation and cookie clearing succeed even without a bearer token or with an expired/invalid JWT. The frontend `finally` block still runs disconnect + `clearAuthSession()` + navigation. Network errors and non-`401` HTTP failures may set optional `logoutError`. Logout `401` does not trigger refresh-on-401; other protected API `401`s use the M2 refresh queue unless refresh fails.
 
 **Cross-tab:** `useAuthController` listens for `storage` events on `access_token` / `auth_user`. When another tab clears the token, this tab disconnects realtime and navigates to `/login` (SPA navigation, not a full reload).
 
@@ -947,7 +954,11 @@ Centralizing the key avoids duplicated `localStorage.getItem('access_token')` ca
 
 ### Token Refresh Behavior
 
-Unable to determine from current implementation — no refresh-token flow is implemented on the frontend. Expiry is detected only when the backend responds `401`, at which point `api.js` clears the token and forces a full-page redirect to `/login`.
+M2 implements frontend refresh-on-401. When a protected API request returns `401`, `api.js` calls `runAuthRefresh()`, which uses `POST /auth/refresh` with `credentials: 'include'`. If refresh succeeds, the access token is updated and the original request is retried once. If refresh fails, the frontend clears auth state, marks the session-expired flag, redirects to `/login`, and shows `SessionExpiredDialog`.
+
+Auth endpoints (`/auth/login`, `/login`, `/auth/logout`, `/auth/refresh`) and requests using `skipAuthRefresh: true` bypass refresh-on-401.
+
+The refresh token remains browser-managed through an HttpOnly cookie and is never read or stored by JavaScript.
 
 ### Route Protection
 
@@ -956,7 +967,7 @@ See [Section 4](#4-routing-documentation). Implemented entirely client-side via:
 - `ProtectedRoute` (token + `auth_user` must exist).
 - `RoleProtectedRoute` (role must be in `allowedRoles`).
 - `GuestRoute` (unauthenticated only).
-- Global `401` handler in `api.js` (`clearAuthSession()` + redirect).
+- Global protected `401` handler in `api.js` (refresh-on-401 + single retry; session-expired UX on failure).
 
 ### Role-Based Rendering / Permission Handling
 
@@ -976,8 +987,8 @@ Backend login returns `data.user` with nested `role` (`UserResource` → `RoleRe
 ### Redirect Handling After Login / Logout
 
 - After successful login: `navigate(getDefaultRouteForRole(role), { replace: true })`. The `state.from` saved by `ProtectedRoute` is **not** consumed.
-- After `401`: `window.location.replace('/login')` (full page reload) unless already at `/login`.
-- After logout: `navigate('/login', { replace: true })` from `handleLogout()` (Profile menu). Global `401` still uses `window.location.replace('/login')`.
+- After protected API refresh failure or retried `401`: `window.location.replace('/login')` (full page reload) unless already at `/login`, with `SessionExpiredDialog` via session-expired flag/event.
+- After logout: `navigate('/login', { replace: true })` from `handleLogout()` (Profile menu).
 
 ---
 
@@ -1544,7 +1555,7 @@ Cancel/success navigation in `useUserAddController` and `useUserFormController` 
 
 ### ~~Logout Is Not Implemented~~ (resolved — Milestone 7)
 
-Logout is wired through `useAuthController.handleLogout()` from `ProfileSection`. Token clearing also still occurs on global `401` in `api.js`.
+Logout is wired through `useAuthController.handleLogout()` from `ProfileSection`. Protected API `401` handling uses M2 refresh-on-401 in `api.js` (not immediate logout).
 
 ### Register Form Is Visual-Only
 
@@ -1629,7 +1640,7 @@ Suggestions that are actionable given the current implementation.
 ### Scalability Improvements
 
 - **Per-feature SWR adoption**: switch the user list to `useSWR('/users', userService.getAllUsers)` for background revalidation, retry, and cache sharing across pages.
-- **Global error / 401 handling**: today, `api.js` triggers a hard `window.location.replace`. Migrating to a router-level navigation (custom event or context) would preserve SPA state.
+- **Global error / session expiry handling**: refresh failure still uses `window.location.replace('/login')`; a future AuthContext or router-level navigation could unify this with SPA transitions.
 - **Code splitting per feature**: today route components are lazy-loaded but feature controllers / repositories still ship as common chunks. With more features, dynamic imports per feature module would matter.
 
 ### Better Architecture Patterns
