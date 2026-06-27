@@ -33,7 +33,7 @@ This document is the primary technical reference for the **`frontend-react-v1`**
 The frontend currently provides:
 
 - A **JWT-protected dashboard layout** (header, sidebar, breadcrumbs, footer, theme customization).
-- A **login flow** that calls the Laravel backend (`POST /login`, with fallback to `POST /auth/login`) and stores `access_token` in `localStorage`.
+- A **login flow** that calls the Laravel backend (`POST /auth/login`, with legacy fallback to `POST /login` on 404) and stores `access_token` in `localStorage`.
 - A **route-guarded** structure that separates protected app routes (`MainRoutes`) from guest-only routes (`AuthenticationRoutes`).
 - A **User Management module** under `feature/management-user` that lists, views, creates, updates, and deletes users via the backend `/users` and `/roles` endpoints at `/admin/management-user`.
 - Sample dashboard widgets (charts, cards) inherited from the Berry template.
@@ -126,7 +126,7 @@ The frontend talks to the Laravel API in `backend-laravel-v1`. The relationship 
 - **Web Push VAPID public key:** `import.meta.env.VITE_VAPID_PUBLIC_KEY` (URL-safe base64; must match backend `VAPID_PUBLIC_KEY`). **Private key stays on the server only.**
 - **Auth scheme:** JWT bearer token (`Authorization: Bearer <token>`); token saved in `localStorage` under key `access_token`.
 - **Endpoints actually called from the frontend (non-exhaustive; see [Section 5](#5-api-integration)):**
-  - `POST /login` (with fallback to `POST /auth/login` on 404) — login.
+  - `POST /auth/login` (with legacy fallback to `POST /login` on 404) — login.
   - `GET /users`, `GET /users/{id}`, `POST /users`, `PATCH /users/{id}`, `DELETE /users/{id}` — user CRUD.
   - Zone, patrol, checkpoint, and **PWA sync** endpoints — see Section 5 tables.
 
@@ -267,8 +267,8 @@ See [Section 4](#4-routing-documentation) for the full table.
 
 ```
    ┌─────────┐     submit form      ┌─────────────────┐
-   │  Login  │ ───────────────────► │ POST /login or   │
-   │  Page   │                       │ POST /auth/login │
+   │  Login  │ ───────────────────► │ POST /auth/login │
+   │  Page   │                       │ (fallback /login)│
    └────┬────┘                       └────────┬─────────┘
         │ 200 OK                              │
         │  data.access_token, data.user       │
@@ -427,7 +427,7 @@ Page-level components rendered by routes:
 | `dashboard/Default/`                       | Berry demo dashboard (Earnings card, Total Order line chart, Total Income light/dark cards, Total Growth bar chart, Popular card, Bajaj area chart). |
 | `pages/authentication/Login.jsx`           | Login page wrapper (uses `AuthWrapper1`, `AuthCardWrapper`).                                                                                         |
 | `pages/authentication/Register.jsx`        | Register page wrapper.                                                                                                                               |
-| `pages/auth-forms/AuthLogin.jsx`           | The actual login form — wired to `api.post('/login')`.                                                                                               |
+| `pages/auth-forms/AuthLogin.jsx`           | The actual login form — wired to `api.post('/auth/login')` with legacy `/login` fallback on 404. |
 | `pages/auth-forms/AuthRegister.jsx`        | Static register form (no submit handler).                                                                                                            |
 | `pages/authentication/AuthWrapper1.jsx`    | Styled `<div>` background for auth pages.                                                                                                            |
 | `pages/authentication/AuthCardWrapper.jsx` | `MainCard` wrapper used on auth pages.                                                                                                               |
@@ -823,8 +823,8 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 
 | Frontend caller                                 | Method   | Path                                                                                                      |
 | ----------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `AuthLogin` (primary)                           | `POST`   | `/login`                                                                                                  |
-| `AuthLogin` (fallback on 404)                   | `POST`   | `/auth/login`                                                                                             |
+| `AuthLogin` (primary)                           | `POST`   | `/auth/login`                                                                                             |
+| `AuthLogin` (legacy fallback on 404)            | `POST`   | `/login`                                                                                                  |
 | `userService.getAllUsers`                       | `GET`    | `/users`                                                                                                  |
 | `userService.getUserById`                       | `GET`    | `/users/{id}`                                                                                             |
 | `userService.createUser`                        | `POST`   | `/users`                                                                                                  |
@@ -866,6 +866,8 @@ There are **no axios-style interceptors**. Equivalent behavior is implemented in
 
 ## 6. Authentication & Authorization
 
+**Login Module baseline (M0):** See [`../backend-laravel-v1/docs/login/m0-auth-baseline-and-current-audit.md`](../backend-laravel-v1/docs/login/m0-auth-baseline-and-current-audit.md) for the current JWT audit, protected API inventory, and migration path. Target design: [`../login-module.md`](../login-module.md).
+
 ### Login Flow
 
 Implemented in `src/views/pages/auth-forms/AuthLogin.jsx`.
@@ -875,8 +877,8 @@ Implemented in `src/views/pages/auth-forms/AuthLogin.jsx`.
    - Email is required and must match `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`.
    - Password is required (no length/complexity rule).
 3. `submitLogin(payload)`:
-   - First tries `POST /login`.
-   - If the call throws `error.status === 404`, retries `POST /auth/login`.
+   - First tries `POST /auth/login`.
+   - If the call throws `error.status === 404`, retries `POST /login` (legacy; current Laravel backend exposes only `/auth/login`).
 4. On success, the response is unpacked as:
 
    ```js
